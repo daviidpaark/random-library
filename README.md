@@ -1,4 +1,4 @@
-# random-library
+# Random Library
 
 A Spicetify custom app that displays your saved Spotify albums and followed artists in a fast, shuffled, filterable grid with on-demand discography exploration, smart edition prioritization, and random discovery. Find it in the left sidebar under the shuffle icon.
 
@@ -28,19 +28,15 @@ A Spicetify custom app that displays your saved Spotify albums and followed arti
   - Visual **`✓`** badge on covers and dropdown items indicating library status.
 - **Streamlined Artwork & Card Format (Shared with Release List)**
   - Unobstructed album art with smooth hover scale (`1.03x`), sliding green Play (▶) button, and `✓` in-library badge.
-  - Dedicated bottom metadata row with release type badge (`ALBUM` in violet, `SINGLE / EP` in emerald, matching Release List colors or your custom Release List theme), interactive edition switcher, and exact release date.
+  - Dedicated bottom metadata row with a release type badge (`ALBUM` or `SINGLE / EP`) and an interactive edition switcher.
   - Sleek hover elevation (`translateY(-3px)`) and subtle translucent borders.
-- **Shared Cache with Release List (`ReleaseListDB`)**
-  - Seamlessly integrates with Release List's local IndexedDB (`ReleaseListDB`):
-    - Instantly pre-fills followed artist discographies in **0ms** without sending redundant network requests.
-    - Enriches saved albums with exact `YYYY-MM-DD` release dates scanned by Release List.
 - **Continuous Filter Randomization** — Selected release filters (e.g. *Albums*, *Singles & EPs*, or *In Library*) persist across **Random Artist** rolls, enabling continuous randomized discovery within a specific category.
 - **Instant Library Sync / Refresh** — Click **`Refresh`** to sync newly saved albums and followed artists from Spotify in real time (also clears random navigation history).
 - **Fluid Responsive Grid Scaling** — Cards, icons, and avatars automatically scale from ultra-wide & 4K displays down to compact split-screen windows.
 - **Persistent Shuffle** — Shuffle order is preserved across app relaunches and sessions.
 - **Search & Sort**
   - Real-time debounced search by album title or artist name.
-  - Multi-column sort options: *Shuffled*, *Release Date (Newest / Oldest)*, *Album A–Z / Z–A*, or *Artist A–Z / Z–A*.
+  - Multi-column sort options: *Shuffled*, *Album A–Z / Z–A*, or *Artist A–Z / Z–A*.
 - **Play on Hover** — Hover over any album or artist card and click the green play button to start playback immediately.
 
 ## Requirements
