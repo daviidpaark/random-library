@@ -4,7 +4,7 @@
 // DESCRIPTION: Displays your saved albums & followed artists in a fast, shuffled, filterable grid.
 
 const { React } = Spicetify;
-const { useState, useEffect, useCallback, useMemo } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 if (typeof document !== "undefined" && !document.getElementById("random-library-keyframes")) {
   const styleEl = document.createElement("style");
@@ -51,6 +51,278 @@ if (typeof document !== "undefined" && !document.getElementById("random-library-
         gap: 12px !important;
       }
     }
+
+    /* High-Performance Card (Identical to Release List) */
+    .rl-card {
+      position: relative;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 8px;
+      padding: 14px;
+      transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      overflow: hidden;
+      user-select: none;
+    }
+    .rl-card:hover {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 255, 255, 0.16);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .rl-card-artwork-wrapper {
+      position: relative;
+      width: 100%;
+      padding-bottom: 100%;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 12px;
+      background: #181818;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+    .rl-card-artwork {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.25s ease;
+    }
+    .rl-card:hover .rl-card-artwork {
+      transform: scale(1.03);
+    }
+
+    .rl-card-avatar-wrapper {
+      position: relative;
+      width: 100%;
+      padding-bottom: 100%;
+      border-radius: 50%;
+      overflow: hidden;
+      margin-bottom: 12px;
+      background: #181818;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+    .rl-card-avatar-wrapper img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.25s ease;
+    }
+    .rl-card:hover .rl-card-avatar-wrapper img {
+      transform: scale(1.03);
+    }
+
+    .rl-play-btn {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #1ed760;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
+      border: none;
+      cursor: pointer;
+      z-index: 5;
+    }
+    .rl-card:hover .rl-play-btn {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .rl-play-btn:hover {
+      transform: scale(1.08) !important;
+      background: #1fdf64 !important;
+    }
+
+    .rl-in-library-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--spice-button, #1ed760);
+      color: #121212;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      z-index: 4;
+    }
+
+    /* Reactive Interactive Card & Control Elements */
+    .rl-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ffffff;
+      cursor: pointer;
+      width: fit-content;
+      max-width: 100%;
+      transition: text-decoration 0.12s ease;
+    }
+    .rl-card-title:hover {
+      text-decoration: underline !important;
+    }
+
+    .rl-card-artist {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      display: inline-block;
+      width: fit-content;
+      max-width: 100%;
+      transition: color 0.15s ease, text-decoration 0.15s ease;
+    }
+    .rl-card-artist:hover {
+      color: #ffffff !important;
+      text-decoration: underline !important;
+    }
+
+    .rl-edition-badge {
+      transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    .rl-edition-badge:hover {
+      transform: scale(1.08) !important;
+      filter: brightness(1.25) !important;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    .rl-edition-item {
+      transition: background 0.12s ease, color 0.12s ease !important;
+    }
+    .rl-edition-item:hover {
+      background: rgba(255, 255, 255, 0.18) !important;
+      color: #ffffff !important;
+    }
+
+    .rl-filter-pill {
+      transition: all 0.15s ease !important;
+    }
+    .rl-filter-pill:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.16) !important;
+      border-color: rgba(255, 255, 255, 0.25) !important;
+      color: #ffffff !important;
+      transform: translateY(-1px);
+    }
+
+    .rl-mode-btn {
+      transition: all 0.15s ease !important;
+    }
+    .rl-mode-btn:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.12) !important;
+      color: #ffffff !important;
+    }
+
+    .rl-banner-artist-link:hover {
+      text-decoration: underline !important;
+    }
+
+    /* Modal Layout (Matching Release List) */
+    .rl-modal-backdrop {
+      position: fixed !important;
+      inset: 0 !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(0, 0, 0, 0.82) !important;
+      backdrop-filter: blur(8px) !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      z-index: 999999 !important;
+      animation: rl-fade-in 0.18s ease;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      color: var(--spice-text, #ffffff);
+      font-family: var(--font-family, spotify-circular, Helvetica, Arial, sans-serif);
+    }
+    .rl-modal-card {
+      background: #181818 !important;
+      border: 1px solid rgba(255, 255, 255, 0.14) !important;
+      border-radius: 12px !important;
+      width: 90% !important;
+      max-width: 580px !important;
+      max-height: 85vh !important;
+      display: flex !important;
+      flex-direction: column !important;
+      box-shadow: 0 24px 56px rgba(0, 0, 0, 0.85) !important;
+      overflow: hidden !important;
+      animation: rl-slide-down 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      margin: auto !important;
+      box-sizing: border-box !important;
+    }
+    .rl-modal-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-height: calc(85vh - 135px);
+      box-sizing: border-box;
+    }
+
+    /* Color picker & settings controls */
+    .rl-color-picker {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      width: 34px;
+      height: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+      padding: 0;
+      flex-shrink: 0;
+      outline: none;
+    }
+    .rl-color-picker::-webkit-color-swatch-wrapper {
+      padding: 2px;
+    }
+    .rl-color-picker::-webkit-color-swatch {
+      border: none;
+      border-radius: 4px;
+    }
+    .rl-color-hex {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 13px;
+      font-family: monospace;
+      padding: 6px 10px;
+      width: 86px;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .rl-color-hex:focus {
+      border-color: #1ed760;
+    }
   `;
   document.head.appendChild(styleEl);
 }
@@ -77,11 +349,136 @@ function fisherYatesShuffle(array) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Release Classification Logic (100% Native Spotify Catalog Groups)
+// 1b. Shared Release List Integration & Design Helpers (ReleaseListDB)
+// ---------------------------------------------------------------------------
+const DEFAULT_GROUP_COLORS = {
+  album: "#8b5cf6",
+  single: "#10b981",
+};
+
+function getContrastYIQ(hexcolor) {
+  const hex = (hexcolor || "#000000").replace("#", "");
+  const r = parseInt(hex.substr(0, 2), 16) || 0;
+  const g = parseInt(hex.substr(2, 2), 16) || 0;
+  const b = parseInt(hex.substr(4, 2), 16) || 0;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? "#000000" : "#ffffff";
+}
+
+const STORAGE_SETTINGS = "random-library:settings";
+
+function getStoredSettings() {
+  try {
+    const raw = Spicetify.LocalStorage.get(STORAGE_SETTINGS);
+    if (raw) return JSON.parse(raw) || {};
+  } catch {}
+  return {};
+}
+
+function saveStoredSettings(settings) {
+  try {
+    Spicetify.LocalStorage.set(STORAGE_SETTINGS, JSON.stringify(settings));
+  } catch {}
+}
+
+function getGroupColors() {
+  try {
+    const local = getStoredSettings();
+    if (local?.syncWithReleaseList === false && local?.groupColors) {
+      return {
+        album: local.groupColors.album || DEFAULT_GROUP_COLORS.album,
+        single: local.groupColors.single || DEFAULT_GROUP_COLORS.single,
+      };
+    }
+    const raw = Spicetify.LocalStorage?.get?.("release-list:settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.groupColors) {
+        return {
+          album: parsed.groupColors.album || DEFAULT_GROUP_COLORS.album,
+          single: parsed.groupColors.single || DEFAULT_GROUP_COLORS.single,
+        };
+      }
+    }
+    if (local?.groupColors) {
+      return {
+        album: local.groupColors.album || DEFAULT_GROUP_COLORS.album,
+        single: local.groupColors.single || DEFAULT_GROUP_COLORS.single,
+      };
+    }
+  } catch {}
+  return DEFAULT_GROUP_COLORS;
+}
+
+const badgeCache = new Map();
+
+function getTypeBadge(type, groupColors = null) {
+  const colors = groupColors || getGroupColors();
+  const cacheKey = `${type}_${colors.album}_${colors.single}`;
+  if (badgeCache.has(cacheKey)) return badgeCache.get(cacheKey);
+
+  let badge;
+  if (type === "single") {
+    const bg = colors.single || DEFAULT_GROUP_COLORS.single;
+    badge = {
+      label: "SINGLE / EP",
+      bg,
+      fg: getContrastYIQ(bg),
+    };
+  } else {
+    const bg = colors.album || DEFAULT_GROUP_COLORS.album;
+    badge = {
+      label: "ALBUM",
+      bg,
+      fg: getContrastYIQ(bg),
+    };
+  }
+  badgeCache.set(cacheKey, badge);
+  return badge;
+}
+
+function extractReleaseDateStr(item) {
+  if (!item) return "";
+  const d =
+    item.release_date ||
+    item.releaseDate ||
+    item.publishDate ||
+    item.date ||
+    item.album?.release_date ||
+    item.album?.releaseDate ||
+    item.album?.publishDate ||
+    item.album?.date;
+  if (typeof d === "string") return d.split("T")[0];
+  if (typeof d === "number") {
+    if (d > 1000 && d < 3000) return String(d);
+    try {
+      const ms = d > 1e11 ? d : d * 1000;
+      const dt = new Date(ms);
+      if (!isNaN(dt.getTime())) return dt.toISOString().split("T")[0];
+    } catch {}
+  }
+  if (d && typeof d === "object") {
+    if (d.isoString) return String(d.isoString).split("T")[0];
+    if (d.year) {
+      const y = String(d.year);
+      const m = d.month ? String(d.month).padStart(2, "0") : "";
+      const day = d.day ? String(d.day).padStart(2, "0") : "";
+      if (m && day) return `${y}-${m}-${day}`;
+      if (m) return `${y}-${m}`;
+      return y;
+    }
+  }
+  const y = item.year || item.publishedYear || item.releaseYear || item.album?.year;
+  if (y) return String(y);
+  return "";
+}
+
+
+// ---------------------------------------------------------------------------
+// 2. Release Classification Logic (Albums & Singles/EPs Only)
 // ---------------------------------------------------------------------------
 function classifyRelease(item, fallbackGroup = "") {
   const groupHint = String(item.album_group || fallbackGroup || "").toLowerCase();
-  if (groupHint.includes("compil")) return "compilation";
   if (groupHint.includes("single") || groupHint.includes("ep")) return "single";
   if (groupHint.includes("album")) return "album";
 
@@ -93,7 +490,6 @@ function classifyRelease(item, fallbackGroup = "") {
     "album"
   ).toLowerCase();
 
-  if (rawGroup.includes("compil")) return "compilation";
   if (rawGroup.includes("single") || rawGroup.includes("ep")) return "single";
   return "album";
 }
@@ -129,30 +525,39 @@ function normalizeSearchString(str) {
     .trim();
 }
 
+// Fast search matcher that compiles query once for high-performance batch filtering
+function createSearchMatcher(rawQuery) {
+  if (!rawQuery || !rawQuery.trim()) return () => true;
+  const q = rawQuery.trim();
+  const normQuery = normalizeSearchString(q);
+  if (!normQuery) return () => true;
+
+  const strippedQuery = normQuery.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const compactQuery = normQuery.replace(/[^\p{L}\p{N}]/gu, "");
+
+  return function matches(text) {
+    if (!text) return false;
+    const normText = normalizeSearchString(text);
+    if (normText.includes(normQuery)) return true;
+
+    if (strippedQuery) {
+      const strippedText = normText.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+      if (strippedText.includes(strippedQuery)) return true;
+    }
+
+    if (compactQuery) {
+      const compactText = normText.replace(/[^\p{L}\p{N}]/gu, "");
+      if (compactText.includes(compactQuery)) return true;
+    }
+
+    return false;
+  };
+}
+
 // Resilient search matcher supporting special characters, punctuation, and diacritics
-// (e.g. "juie" matches "JU!iE", "acdc" matches "AC/DC", "rosalia" matches "Rosalía", "jay z" matches "JAY-Z")
 function matchesSearchQuery(text, query) {
   if (!query) return true;
-  if (!text) return false;
-
-  const normText = normalizeSearchString(text);
-  const normQuery = normalizeSearchString(query);
-  if (!normQuery) return true;
-
-  // 1. Direct normalized substring match (handles accents, diacritics & casing)
-  if (normText.includes(normQuery)) return true;
-
-  // 2. Punctuation-stripped match (replaces punctuation/symbols with spaces)
-  const strippedText = normText.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const strippedQuery = normQuery.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  if (strippedQuery && strippedText.includes(strippedQuery)) return true;
-
-  // 3. Compact match (strips all whitespace and symbols: "juie" matches "ju!ie", "acdc" matches "ac/dc")
-  const compactText = normText.replace(/[^\p{L}\p{N}]/gu, "");
-  const compactQuery = normQuery.replace(/[^\p{L}\p{N}]/gu, "");
-  if (compactText && compactQuery && compactText.includes(compactQuery)) return true;
-
-  return false;
+  return createSearchMatcher(query)(text);
 }
 
 // Extract edition metadata for alternative edition detection & badge tags
@@ -204,7 +609,8 @@ async function fetchAllSavedAlbums(onProgress) {
 
       const firstArtist = item.artists?.[0];
       const artistUri = firstArtist?.uri || item.artistUri || (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : "");
-      const releaseYear = item.publishDate?.year || item.year || item.releaseDate?.year || (typeof item.releaseDate === "string" ? item.releaseDate.slice(0, 4) : "") || "";
+      const rawDate = extractReleaseDateStr(item);
+      const releaseYear = rawDate ? rawDate.slice(0, 4) : "";
 
       albums.push({
         uri: item.uri,
@@ -213,7 +619,8 @@ async function fetchAllSavedAlbums(onProgress) {
         artistUri: artistUri,
         imageUrl: item.images?.[0]?.url ?? item.imgUrl ?? "",
         type: classifyRelease(item),
-        year: releaseYear ? String(releaseYear) : "",
+        year: releaseYear,
+        releaseDate: rawDate,
       });
     }
 
@@ -221,6 +628,8 @@ async function fetchAllSavedAlbums(onProgress) {
     offset += limit;
     onProgress?.(albums.length, total);
   }
+
+
 
   return albums;
 }
@@ -408,6 +817,7 @@ async function getSpotifyAccessToken() {
 
 // Resilient Web API requester: tries Bearer fetch, with automatic fallback to CosmosAsync
 async function fetchWebApiJson(url, token) {
+  let lastErr = null;
   if (token) {
     try {
       const res = await fetch(url, {
@@ -419,94 +829,38 @@ async function fetchWebApiJson(url, token) {
       if (res.ok) {
         return await res.json();
       }
-    } catch {
-      // Fall through to CosmosAsync
+      if (res.status === 429) {
+        const retryAfter = parseInt(res.headers.get("Retry-After") || "2", 10);
+        await new Promise((r) => setTimeout(r, retryAfter * 1000));
+        const retryRes = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (retryRes.ok) return await retryRes.json();
+        throw new Error(`HTTP 429: Rate limited by Spotify Web API (Retry-After: ${retryAfter}s)`);
+      }
+      lastErr = new Error(`HTTP ${res.status}: ${res.statusText || "Web API request failed"}`);
+    } catch (e) {
+      lastErr = e;
     }
   }
   if (Spicetify.CosmosAsync?.get) {
     try {
       return await Spicetify.CosmosAsync.get(url);
-    } catch {
-      // ignore
+    } catch (e) {
+      if (!lastErr) lastErr = e;
     }
   }
+  if (lastErr) throw lastErr;
   return null;
 }
 
-// Build sanitized search queries for Spotify Web API (/v1/search uses Lucene syntax)
-// Reserved Lucene characters [+ - && || ! ( ) { } [ ] ^ " ~ * ? : \ /] break searches or act as NOT operators
-function buildSearchQueries(artistName) {
-  if (!artistName || !artistName.trim()) return [];
 
-  const raw = artistName.trim();
-  const queries = new Set();
-
-  // 1. Cleaned for Lucene: replace Lucene reserved characters with spaces so they don't break the query parser
-  const luceneCleaned = raw
-    .replace(/[+\-&|!(){}\[\]^"~*?:\\/]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (luceneCleaned) {
-    queries.add(`artist:"${luceneCleaned}"`);
-    queries.add(`"${luceneCleaned}"`);
-  }
-
-  // 2. Punctuation stripped completely (e.g. "JU!iE" -> "JUiE", "AC/DC" -> "ACDC")
-  const stripped = raw
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (stripped && stripped.toLowerCase() !== luceneCleaned.toLowerCase()) {
-    queries.add(`artist:"${stripped}"`);
-  }
-
-  // 3. Compact alphanumeric if distinct
-  const compact = raw.replace(/[^\p{L}\p{N}]/gu, "");
-  if (compact && compact.length >= 3 && compact.toLowerCase() !== stripped.toLowerCase()) {
-    queries.add(`artist:"${compact}"`);
-  }
-
-  return Array.from(queries);
-}
-
-// Compare release artist credits with target artist (handles special characters, full-width, and features)
-function isItemMatchingArtist(item, artistId, artistName) {
-  if (!item) return false;
-
-  // 1. ID or URI match
-  if (artistId && item.artists?.some((a) => a.id === artistId || a.uri === `spotify:artist:${artistId}`)) {
-    return true;
-  }
-
-  // 2. Normalized name match (ignoring accents, punctuation, casing)
-  if (artistName) {
-    const normTarget = normalizeSearchString(artistName);
-    const compactTarget = normTarget.replace(/[^\p{L}\p{N}]/gu, "");
-
-    const artistNameMatches = item.artists?.some((a) => {
-      if (!a?.name) return false;
-      const aNorm = normalizeSearchString(a.name);
-      if (aNorm === normTarget) return true;
-      const aCompact = aNorm.replace(/[^\p{L}\p{N}]/gu, "");
-      return compactTarget && aCompact === compactTarget;
-    });
-
-    if (artistNameMatches) return true;
-
-    // 3. Title credits match (e.g. "feat. JU!iE", "with JU!iE")
-    if (item.name && matchesSearchQuery(item.name, artistName)) {
-      return true;
-    }
-  }
-
-  return false;
-}
 
 async function fetchArtistReleases(artistUri, artistName = "") {
+  if (!artistUri) return [];
   if (artistDiscographyCache.has(artistUri)) {
     return artistDiscographyCache.get(artistUri);
   }
@@ -522,139 +876,85 @@ async function fetchArtistReleases(artistUri, artistName = "") {
     }
   };
 
-  // Obtain authorization token
-  const token = await getSpotifyAccessToken();
+  // Layer 1: Native Desktop GraphQL - queryArtistDiscographyAll (Spotify Native, instant & reliable)
+  if (Spicetify.GraphQL?.Request) {
+    try {
+      const discographyDef =
+        Spicetify.GraphQL.Definitions?.queryArtistDiscographyAll || {
+          name: "queryArtistDiscographyAll",
+          operation: "query",
+          sha256Hash: "9380995a9d4663cbcb5113fef3c6aabf70ae6d407ba61793fd01e2a1dd6929b0",
+          value: null,
+        };
 
-  // Layer 1: Spotify Web API - Artist Catalog Groups
-  // Strictly queries ["album", "single", "compilation"] (NO appears_on)
-  try {
-    const groups = ["album", "single", "compilation"];
-    const fetchGroup = async (group) => {
-      let nextUrl = `https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=${group}&limit=50`;
-      while (nextUrl) {
-        try {
-          const data = await fetchWebApiJson(nextUrl, token);
-          if (!data?.items || data.items.length === 0) break;
+      let offset = 0;
+      const limit = 100;
+      let total = Infinity;
 
-          for (const item of data.items) {
+      while (offset < total && offset < 500) {
+        const { data, errors } = await Spicetify.GraphQL.Request(discographyDef, {
+          uri: artistUri,
+          offset,
+          limit,
+        });
+
+        if (errors && (!data || !data.artistUnion)) {
+          console.warn("[Random Library] GraphQL discography query errors:", errors);
+          break;
+        }
+
+        const discogAll = data?.artistUnion?.discography?.all;
+        const groups = discogAll?.items || [];
+        if (groups.length === 0) break;
+
+        total = discogAll?.totalCount ?? groups.length;
+
+        for (const group of groups) {
+          const releaseList = group.releases?.items || (group.uri ? [group] : []);
+          for (const item of releaseList) {
+            if (!item?.uri) continue;
+            const rawType = item.type || item.albumType || group.type || group.albumType || "album";
+            const t = String(rawType).toUpperCase();
+            if (t.includes("COMPILATION") || t.includes("APPEARS_ON")) continue;
+            const normType = (t.includes("SINGLE") || t.includes("EP")) ? "single" : "album";
+
+            const artistsList = item.artists?.items
+              ? item.artists.items.map((a) => a.profile?.name || a.name).filter(Boolean).join(", ")
+              : (Array.isArray(item.artists) ? item.artists.map((a) => a.name).filter(Boolean).join(", ") : "");
+
+            const coverUrl =
+              item.coverArt?.sources?.reduce((max, src) => (src.width > max.width ? src : max), { width: 0, url: "" })?.url ||
+              item.images?.[0]?.url ||
+              item.imgUrl ||
+              "";
+
+            const dateStr =
+              item.date?.isoString?.split("T")?.[0] ||
+              (item.date?.year ? String(item.date.year) : "") ||
+              extractReleaseDateStr(item) ||
+              "";
+
             addRelease({
               uri: item.uri,
               name: item.name,
-              artist: item.artists?.map((a) => a.name).join(", ") || artistName,
-              imageUrl: item.images?.[0]?.url || item.images?.[1]?.url || "",
-              type: classifyRelease(item, group),
-              releaseDate: item.release_date || item.releaseDate || "",
+              artist: artistsList || artistName,
+              imageUrl: coverUrl,
+              type: normType,
+              releaseDate: dateStr,
             });
           }
-          nextUrl = data.next;
-        } catch {
-          break;
         }
+
+        if (groups.length < limit || offset + groups.length >= total) break;
+        offset += limit;
       }
-    };
-
-    await Promise.all(groups.map((g) => fetchGroup(g)));
-  } catch (err) {
-    console.warn("[Random Library] Web API catalog fetch error:", err);
-  }
-
-  // Layer 2: Spotify Web API - Search Discovery (captures collabs & primary releases with Lucene-safe queries)
-  if (artistName) {
-    try {
-      const searchQueries = buildSearchQueries(artistName);
-
-      for (const query of searchQueries) {
-        let offset = 0;
-        let total = Infinity;
-        while (offset < total && offset < 300) {
-          const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=album&limit=50&offset=${offset}`;
-          try {
-            const data = await fetchWebApiJson(url, token);
-            const albums = data?.albums;
-            if (!albums?.items || albums.items.length === 0) break;
-
-            total = albums.total ?? albums.items.length;
-            for (const item of albums.items) {
-              if (isItemMatchingArtist(item, artistId, artistName)) {
-                const groupHint = item.album_group || item.album_type || "album";
-                addRelease({
-                  uri: item.uri,
-                  name: item.name,
-                  artist: item.artists?.map((a) => a.name).join(", ") || artistName,
-                  imageUrl: item.images?.[0]?.url || item.images?.[1]?.url || "",
-                  type: classifyRelease(item, groupHint),
-                  releaseDate: item.release_date || item.releaseDate || "",
-                });
-              }
-            }
-            offset += 50;
-          } catch {
-            break;
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[Random Library] Web API search discovery error:", err);
+    } catch (gqlErr) {
+      console.warn("[Random Library] GraphQL discography fetch failed, trying fallbacks:", gqlErr);
     }
   }
 
-  // Layer 3: Cosmos hm:// protocol (Spotify desktop native service)
-  try {
-    const res = await Spicetify.CosmosAsync?.get?.(`hm://artist/v1/${artistId}/desktop?format=json`);
-    if (res?.releases) {
-      const addCosmosReleases = (list, groupType) => {
-        if (!list) return;
-        for (const item of list) {
-          const imageHash = item.cover?.uri ? item.cover.uri.split(":").pop() : null;
-          addRelease({
-            uri: item.uri,
-            name: item.name,
-            artist: item.artists?.map((a) => a.name).join(", ") || artistName || res.name || "",
-            imageUrl: imageHash ? `https://i.scdn.co/image/${imageHash}` : "",
-            type: classifyRelease({ ...item, album_group: groupType }, groupType),
-            releaseDate: item.year ? String(item.year) : (item.publishDate || ""),
-          });
-        }
-      };
-
-      addCosmosReleases(res.releases.albums?.releases, "album");
-      addCosmosReleases(res.releases.singles?.releases, "single");
-      addCosmosReleases(res.releases.compilations?.releases, "compilation");
-    }
-  } catch (err) {
-    console.warn("[Random Library] Cosmos discography fetch error:", err);
-  }
-
-  // Layer 4: Spicetify GraphQL Discography Queries
-  if (Spicetify.GraphQL?.Request) {
-    const extractGraphQLItems = (collection, groupType) => {
-      if (!collection?.items) return 0;
-      for (const entry of collection.items) {
-        const rel = entry.releases?.items?.[0] || entry;
-        if (rel?.uri) {
-          const relType = rel.type || rel.albumType || groupType || "";
-          const totalTracks = rel.tracks?.totalCount || rel.tracks?.items?.length || 1;
-          const artistsList = rel.artists?.items?.map((a) => a.profile?.name || a.name).filter(Boolean).join(", ");
-          const imgUrl = rel.coverArt?.sources?.[0]?.url || rel.images?.[0]?.url || "";
-          const relDate = rel.date?.year ? String(rel.date.year) : (rel.date?.isoString || rel.releaseDate || "");
-
-          addRelease({
-            uri: rel.uri,
-            name: rel.name,
-            artist: artistsList || artistName,
-            imageUrl: imgUrl,
-            type: classifyRelease(
-              { ...rel, type: relType, total_tracks: totalTracks },
-              groupType
-            ),
-            releaseDate: relDate,
-          });
-        }
-      }
-      return collection.totalCount ?? collection.items.length;
-    };
-
-    // 4a. Artist Overview Query (fetches initial albums, singles, compilations)
+  // Layer 2: Spicetify GraphQL Overview Fallback
+  if (releases.length === 0 && Spicetify.GraphQL?.Request) {
     try {
       const overviewDef =
         Spicetify.GraphQL.Definitions?.queryArtistOverview || {
@@ -671,56 +971,108 @@ async function fetchArtistReleases(artistUri, artistName = "") {
 
       const discog = data?.artistUnion?.discography;
       if (discog) {
-        extractGraphQLItems(discog.albums, "album");
-        extractGraphQLItems(discog.singles, "single");
-        extractGraphQLItems(discog.compilations, "compilation");
-        extractGraphQLItems(discog.all, "");
-        extractGraphQLItems(discog.popularReleasesAlbums, "album");
+        const groups = [
+          ...(discog.albums?.items || []),
+          ...(discog.singles?.items || []),
+          ...(discog.all?.items || []),
+          ...(discog.popularReleasesAlbums?.items || []),
+        ];
+
+        for (const group of groups) {
+          const releaseList = group.releases?.items || (group.uri ? [group] : []);
+          for (const item of releaseList) {
+            if (!item?.uri) continue;
+            const rawType = item.type || item.albumType || group.type || group.albumType || "album";
+            const t = String(rawType).toUpperCase();
+            if (t.includes("COMPILATION") || t.includes("APPEARS_ON")) continue;
+            const normType = (t.includes("SINGLE") || t.includes("EP")) ? "single" : "album";
+
+            const artistsList = item.artists?.items
+              ? item.artists.items.map((a) => a.profile?.name || a.name).filter(Boolean).join(", ")
+              : (Array.isArray(item.artists) ? item.artists.map((a) => a.name).filter(Boolean).join(", ") : "");
+
+            const coverUrl =
+              item.coverArt?.sources?.reduce((max, src) => (src.width > max.width ? src : max), { width: 0, url: "" })?.url ||
+              item.images?.[0]?.url ||
+              item.imgUrl ||
+              "";
+
+            const dateStr =
+              item.date?.isoString?.split("T")?.[0] ||
+              (item.date?.year ? String(item.date.year) : "") ||
+              extractReleaseDateStr(item) ||
+              "";
+
+            addRelease({
+              uri: item.uri,
+              name: item.name,
+              artist: artistsList || artistName,
+              imageUrl: coverUrl,
+              type: normType,
+              releaseDate: dateStr,
+            });
+          }
+        }
       }
     } catch (err) {
-      console.warn("[Random Library] GraphQL overview query error:", err);
+      console.warn("[Random Library] GraphQL overview fallback error:", err);
     }
+  }
 
-    // 4b. Paginated Discography Queries (requires order: "DATE_DESC")
-    const paginatedDefs = [
-      Spicetify.GraphQL.Definitions?.queryArtistDiscographyAll || {
-        name: "queryArtistDiscographyAll",
-        operation: "query",
-        sha256Hash: "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599",
-        value: null,
-      },
-      Spicetify.GraphQL.Definitions?.queryArtistDiscographyAlbums,
-      Spicetify.GraphQL.Definitions?.queryArtistDiscographySingles,
-      Spicetify.GraphQL.Definitions?.queryArtistDiscographyCompilations,
-    ].filter(Boolean);
+  // Layer 3: Cosmos hm:// protocol Fallback (Spotify Desktop Native)
+  if (releases.length === 0 && Spicetify.CosmosAsync?.get) {
+    try {
+      const res = await Spicetify.CosmosAsync.get(`hm://artist/v1/${artistId}/desktop?format=json`);
+      if (res?.releases) {
+        const addCosmosReleases = (list, groupType) => {
+          if (!list) return;
+          for (const item of list) {
+            const imageHash = item.cover?.uri ? item.cover.uri.split(":").pop() : null;
+            addRelease({
+              uri: item.uri,
+              name: item.name,
+              artist: item.artists?.map((a) => a.name).join(", ") || artistName || res.name || "",
+              imageUrl: imageHash ? `https://i.scdn.co/image/${imageHash}` : "",
+              type: classifyRelease({ ...item, album_group: groupType }, groupType),
+              releaseDate: extractReleaseDateStr(item),
+            });
+          }
+        };
 
-    for (const def of paginatedDefs) {
-      try {
-        let offset = 0;
-        let total = Infinity;
-        while (offset < total && offset < 500) {
-          const { data } = await Spicetify.GraphQL.Request(def, {
-            uri: artistUri,
-            offset,
-            limit: 100,
-            order: "DATE_DESC",
-          });
-
-          const discog = data?.artistUnion?.discography;
-          if (!discog) break;
-
-          const t1 = extractGraphQLItems(discog.all, "");
-          const t2 = extractGraphQLItems(discog.albums, "album");
-          const t3 = extractGraphQLItems(discog.singles, "single");
-          const t4 = extractGraphQLItems(discog.compilations, "compilation");
-
-          total = Math.max(t1, t2, t3, t4, 0);
-          if (total === 0 || offset >= total) break;
-          offset += 100;
-        }
-      } catch (err) {
-        console.warn("[Random Library] GraphQL discography query error:", err);
+        addCosmosReleases(res.releases.albums?.releases, "album");
+        addCosmosReleases(res.releases.singles?.releases, "single");
       }
+    } catch (err) {
+      console.warn("[Random Library] Cosmos discography fallback error:", err);
+    }
+  }
+
+  // Layer 4: Spotify Web API Fallback (last resort)
+  if (releases.length === 0) {
+    try {
+      const token = await getSpotifyAccessToken();
+      if (token) {
+        for (const group of ["album", "single"]) {
+          try {
+            const nextUrl = `https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=${group}&limit=50`;
+            const data = await fetchWebApiJson(nextUrl, token);
+            if (data?.items) {
+              for (const item of data.items) {
+                addRelease({
+                  uri: item.uri,
+                  name: item.name,
+                  artist: item.artists?.map((a) => a.name).join(", ") || artistName,
+                  imageUrl: item.images?.[0]?.url || item.images?.[1]?.url || "",
+                  type: classifyRelease(item, group),
+                  releaseDate: item.release_date || item.releaseDate || "",
+                });
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn("[Random Library] Web API catalog fetch fallback error:", err);
     }
   }
 
@@ -917,8 +1269,10 @@ const STYLES = {
   controlsRow: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: "12px",
     flexWrap: "wrap",
+    width: "100%",
   },
   searchWrapper: {
     position: "relative",
@@ -1018,10 +1372,7 @@ const STYLES = {
     objectFit: "cover",
   },
   badge: (type) => ({
-    position: "absolute",
-    top: "6px",
-    left: "6px",
-    fontSize: "9px",
+    fontSize: "10px",
     fontWeight: "800",
     textTransform: "uppercase",
     padding: "2px 6px",
@@ -1031,15 +1382,7 @@ const STYLES = {
     background:
       type === "single"
         ? "#1db954"
-        : type === "compilation"
-        ? "#f59b23"
-        : type === "appears_on"
-        ? "#4b917d"
-        : "rgba(0, 0, 0, 0.65)",
-    border: type === "album" || !type ? "1px solid rgba(255, 255, 255, 0.2)" : "none",
-    backdropFilter: "blur(6px)",
-    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.4)",
-    zIndex: 3,
+        : "rgba(255, 255, 255, 0.15)",
   }),
   editionInlineChip: (label) => {
     const isDeluxe = /deluxe|director'?s cut|expanded|complete|special/i.test(label);
@@ -1068,61 +1411,40 @@ const STYLES = {
         : "1px solid rgba(255, 255, 255, 0.2)",
     };
   },
-  inLibraryBadge: {
-    position: "absolute",
-    top: "6px",
-    right: "6px",
-    width: "20px",
-    height: "20px",
-    borderRadius: "50%",
-    background: "var(--spice-button, #1ed760)",
-    color: "#121212",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
-    zIndex: 3,
-  },
   editionBadge: (isUpgrade) => ({
-    position: "absolute",
-    bottom: "6px",
-    left: "6px",
-    fontSize: "9px",
+    fontSize: "10px",
     fontWeight: "800",
     textTransform: "uppercase",
-    padding: "3px 7px",
+    padding: "2px 6px",
     borderRadius: "4px",
     letterSpacing: "0.5px",
     color: "#fff",
     background: isUpgrade
       ? "linear-gradient(135deg, #8a2387, #e94057, #f27121)"
-      : "rgba(30, 30, 30, 0.85)",
-    backdropFilter: "blur(6px)",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
+      : "rgba(255, 255, 255, 0.12)",
     border: isUpgrade ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(255,255,255,0.15)",
-    display: "flex",
+    display: "inline-flex",
     alignItems: "center",
     gap: "4px",
     cursor: "pointer",
-    zIndex: 4,
-    transition: "transform 0.15s ease",
+    transition: "transform 0.15s ease, background 0.15s ease",
   }),
   editionDropdown: {
     position: "absolute",
-    bottom: "32px",
-    left: "6px",
-    right: "6px",
-    background: "rgba(20, 20, 20, 0.95)",
-    backdropFilter: "blur(12px)",
+    bottom: "28px",
+    left: "0",
+    right: "0",
+    background: "rgba(20, 20, 20, 0.96)",
+    backdropFilter: "blur(14px)",
     borderRadius: "8px",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
+    border: "1px solid rgba(255, 255, 255, 0.18)",
     padding: "6px",
-    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.8)",
-    zIndex: 10,
+    boxShadow: "0 10px 28px rgba(0, 0, 0, 0.85)",
+    zIndex: 20,
     display: "flex",
     flexDirection: "column",
     gap: "4px",
-    maxHeight: "160px",
+    maxHeight: "170px",
     overflowY: "auto",
   },
   editionItem: (isActive) => ({
@@ -1204,12 +1526,11 @@ const STYLES = {
 // 7. Components
 // ---------------------------------------------------------------------------
 
-function AlbumCard({ album, isSaved = false }) {
-  const [hovered, setHovered] = useState(false);
+const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupColors = null }) {
   const [showEditions, setShowEditions] = useState(false);
 
-  function handleClick() {
-    if (showEditions) return;
+  function handleClick(e) {
+    if (e.target.closest("button") || e.target.closest(".rl-play-btn") || e.target.closest(".rl-card-artist") || e.target.closest(".rl-edition-badge") || showEditions) return;
     const albumId = album.uri.split(":").pop();
     Spicetify.Platform.History.push("/album/" + albumId);
   }
@@ -1227,173 +1548,214 @@ function AlbumCard({ album, isSaved = false }) {
   }
 
   const hasEditions = Boolean(album.editions && album.editions.length > 1);
+  const colors = groupColors || getGroupColors();
+  const typeBadge = getTypeBadge(album.type || "album", colors);
 
   return React.createElement(
     "div",
     {
-      style: {
-        ...STYLES.card,
-        background: hovered ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-        position: "relative",
-      },
+      className: "rl-card",
       onClick: handleClick,
-      onMouseEnter: () => setHovered(true),
-      onMouseLeave: () => {
-        setHovered(false);
-        setShowEditions(false);
-      },
+      onMouseLeave: () => setShowEditions(false),
       title: `${album.name} – ${album.artist}${isSaved ? " (In Library)" : ""}`,
     },
+    // Artwork container (clean, matching release-list)
     React.createElement(
       "div",
-      { style: STYLES.imageWrapper },
+      { className: "rl-card-artwork-wrapper" },
       album.imageUrl
         ? React.createElement("img", {
+            className: "rl-card-artwork",
             src: album.imageUrl,
             alt: album.name,
-            style: STYLES.image,
             loading: "lazy",
+            decoding: "async",
           })
         : React.createElement("div", {
-            style: { ...STYLES.image, background: "var(--spice-card, #333)" },
+            style: { width: "100%", height: "100%", background: "#181818" },
           }),
-      // Top Left: Always show release type badge (Album, Single / EP, Compilation, Appears On)
-      React.createElement(
-        "div",
-        { style: STYLES.badge(album.type || "album") },
-        album.type === "single"
-          ? "Single / EP"
-          : album.type === "compilation"
-          ? "Compilation"
-          : album.type === "appears_on"
-          ? "Appears On"
-          : "Album"
-      ),
-      // Bottom Left: Edition status at a glance (Deluxe Available or N Editions) ONLY if multi-editions exist
-      hasEditions && React.createElement(
-        "div",
-        {
-          style: STYLES.editionBadge(album.hasUpgradeAvailable),
-          onClick: (e) => {
-            e.stopPropagation();
-            setShowEditions((prev) => !prev);
+      // In-Library Checkmark Badge (top right)
+      isSaved &&
+        React.createElement(
+          "div",
+          {
+            className: "rl-in-library-badge",
+            title: "In your Library",
           },
-          title: "Click to view and switch editions",
-        },
-        React.createElement(
-          "svg",
-          { width: "10", height: "10", viewBox: "0 0 24 24", fill: "currentColor" },
-          React.createElement("path", { d: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" })
+          React.createElement(
+            "svg",
+            { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor" },
+            React.createElement("path", {
+              d: "M13.985 2.383L5.674 12.14 1.34 7.805l1.414-1.414 2.92 2.92 6.897-8.106 1.414 1.178z",
+            })
+          )
         ),
-        album.hasUpgradeAvailable
-          ? "Deluxe Available"
-          : `${album.editions.length} Editions ▾`
-      ),
-      isSaved && React.createElement(
-        "div",
-        {
-          style: STYLES.inLibraryBadge,
-          title: "In your Library",
-          "aria-label": "In your Library",
-        },
-        React.createElement(
-          "svg",
-          { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor" },
-          React.createElement("path", {
-            d: "M13.985 2.383L5.674 12.14 1.34 7.805l1.414-1.414 2.92 2.92 6.897-8.106 1.414 1.178z",
-          })
-        )
-      ),
+      // Play Button on hover (bottom right)
       React.createElement(
         "button",
         {
-          style: {
-            ...STYLES.playBtn,
-            opacity: hovered && !showEditions ? 1 : 0,
-            transform: hovered && !showEditions ? "scale(1) translateY(0)" : "scale(0.8) translateY(6px)",
-          },
+          className: "rl-play-btn",
           onClick: handlePlay,
           title: "Play " + album.name,
           "aria-label": "Play " + album.name,
         },
         React.createElement(
           "svg",
-          { width: "20", height: "20", viewBox: "0 0 24 24", fill: "#000" },
-          React.createElement("path", { d: "M8 5v14l11-7z" })
+          { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor" },
+          React.createElement("polygon", { points: "5,3 19,12 5,21" })
         )
-      ),
-      showEditions && hasEditions && React.createElement(
+      )
+    ),
+    // Metadata block (matching release-list)
+    React.createElement(
+      "div",
+      { style: { display: "flex", flexDirection: "column", gap: 4, position: "relative" } },
+      // Title
+      React.createElement(
         "div",
         {
-          style: STYLES.editionDropdown,
-          onClick: (e) => e.stopPropagation(),
+          className: "rl-card-title",
+          title: album.name,
+        },
+        album.name
+      ),
+      // Artist
+      React.createElement(
+        "div",
+        {
+          className: "rl-card-artist",
+          onClick: (e) => {
+            e.stopPropagation();
+            let artistUri = album.artistUri;
+            if (!artistUri && followedArtistCache && followedArtistCache.length > 0) {
+              const match = followedArtistCache.find(
+                (a) => a.name && a.name.toLowerCase() === (album.artist || "").toLowerCase()
+              );
+              if (match) artistUri = match.uri;
+            }
+
+            if (artistUri) {
+              const id = artistUri.split(":").pop();
+              Spicetify.Platform.History.push("/artist/" + id);
+            } else if (album.artist) {
+              Spicetify.Platform.History.push("/search/" + encodeURIComponent(album.artist));
+            }
+          },
+          title: `Go to ${album.artist || "Artist"}'s Spotify page`,
+        },
+        album.artist
+      ),
+      // Bottom Row: Type badge + Editions button (left) and Year (right)
+      React.createElement(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: 6,
+          },
         },
         React.createElement(
           "div",
-          { style: { fontSize: "10px", color: "var(--spice-subtext)", padding: "2px 4px 4px 4px", fontWeight: "800", letterSpacing: "0.5px" } },
-          "AVAILABLE EDITIONS"
-        ),
-        album.editions.map((ed) => {
-          const isCurrent = ed.uri === album.uri;
-          return React.createElement(
-            "button",
+          { style: { display: "flex", alignItems: "center", gap: 6 } },
+          // Type Badge with exact Release List colors and typography
+          React.createElement(
+            "span",
             {
-              key: ed.uri,
-              style: STYLES.editionItem(isCurrent),
-              onClick: (e) => handleEditionClick(e, ed),
-              title: `Open ${ed.name}`,
+              style: {
+                fontSize: 10,
+                fontWeight: 800,
+                padding: "2px 6px",
+                borderRadius: 4,
+                backgroundColor: typeBadge.bg,
+                color: typeBadge.fg,
+                letterSpacing: "0.5px",
+              },
             },
+            typeBadge.label
+          ),
+          // Edition Switcher Button
+          hasEditions &&
             React.createElement(
-              "span",
-              { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: "6px" } },
-              ed.name
-            ),
-            ed.isSaved && React.createElement(
-              "span",
-              { style: { color: "#1ed760", fontSize: "11px", fontWeight: "bold" }, title: "In Library" },
-              "✓"
+              "button",
+              {
+                className: "rl-edition-badge",
+                style: STYLES.editionBadge(album.hasUpgradeAvailable),
+                onClick: (e) => {
+                  e.stopPropagation();
+                  setShowEditions((prev) => !prev);
+                },
+                title: "Click to view and switch editions",
+              },
+              React.createElement(
+                "svg",
+                { width: "10", height: "10", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", { d: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" })
+              ),
+              album.hasUpgradeAvailable ? "Deluxe" : `${album.editions.length} Eds ▾`
             )
-          );
-        })
-      )
-    ),
-    React.createElement("div", { style: STYLES.albumName }, album.name),
-    React.createElement(
-      "div",
-      {
-        style: {
-          ...STYLES.artistName,
-          cursor: "pointer",
-        },
-        onClick: (e) => {
-          e.stopPropagation();
-          let artistUri = album.artistUri;
-          if (!artistUri && followedArtistCache && followedArtistCache.length > 0) {
-            const match = followedArtistCache.find(
-              (a) => a.name && a.name.toLowerCase() === (album.artist || "").toLowerCase()
+        )
+      ),
+      // Edition Dropdown (shown when opened)
+      showEditions &&
+        hasEditions &&
+        React.createElement(
+          "div",
+          {
+            style: STYLES.editionDropdown,
+            onClick: (e) => e.stopPropagation(),
+          },
+          React.createElement(
+            "div",
+            {
+              style: {
+                fontSize: "10px",
+                color: "var(--spice-subtext)",
+                padding: "2px 4px 4px 4px",
+                fontWeight: "800",
+                letterSpacing: "0.5px",
+              },
+            },
+            "AVAILABLE EDITIONS"
+          ),
+          album.editions.map((ed) => {
+            const isCurrent = ed.uri === album.uri;
+            return React.createElement(
+              "button",
+              {
+                key: ed.uri,
+                className: "rl-edition-item",
+                style: STYLES.editionItem(isCurrent),
+                onClick: (e) => handleEditionClick(e, ed),
+                title: `Open ${ed.name}`,
+              },
+              React.createElement(
+                "span",
+                {
+                  style: {
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    marginRight: "6px",
+                  },
+                },
+                ed.name
+              ),
+              ed.isSaved &&
+                React.createElement(
+                  "span",
+                  { style: { color: "#1ed760", fontSize: "11px", fontWeight: "bold" }, title: "In Library" },
+                  "✓"
+                )
             );
-            if (match) artistUri = match.uri;
-          }
-
-          if (artistUri) {
-            const id = artistUri.split(":").pop();
-            Spicetify.Platform.History.push("/artist/" + id);
-          } else if (album.artist) {
-            Spicetify.Platform.History.push("/search/" + encodeURIComponent(album.artist));
-          }
-        },
-        onMouseEnter: (e) => (e.currentTarget.style.textDecoration = "underline"),
-        onMouseLeave: (e) => (e.currentTarget.style.textDecoration = "none"),
-        title: `Go to ${album.artist || "Artist"}'s Spotify page`,
-      },
-      album.artist
+          })
+        )
     )
   );
-}
+});
 
-function ArtistCard({ artist, onClick }) {
-  const [hovered, setHovered] = useState(false);
-
+const ArtistCard = React.memo(function ArtistCard({ artist, onClick }) {
   function handlePlay(e) {
     e.stopPropagation();
     Spicetify.Player.playUri(artist.uri);
@@ -1410,84 +1772,66 @@ function ArtistCard({ artist, onClick }) {
   return React.createElement(
     "div",
     {
-      style: {
-        ...STYLES.card,
-        background: hovered ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
-        textAlign: "center",
+      className: "rl-card",
+      onClick: (e) => {
+        if (e.target.closest("button") || e.target.closest(".rl-play-btn") || e.target.closest(".rl-card-artist")) return;
+        onClick(artist);
       },
-      onClick: () => onClick(artist),
-      onMouseEnter: () => setHovered(true),
-      onMouseLeave: () => setHovered(false),
       title: `${artist.name} (Click to open discography in Random Library)`,
     },
     React.createElement(
       "div",
-      { style: STYLES.artistAvatarWrapper },
+      { className: "rl-card-avatar-wrapper" },
       artist.imageUrl
         ? React.createElement("img", {
             src: artist.imageUrl,
             alt: artist.name,
-            style: STYLES.image,
             loading: "lazy",
+            decoding: "async",
           })
         : React.createElement("div", {
-            style: { ...STYLES.image, background: "var(--spice-card, #333)" },
+            style: { width: "100%", height: "100%", background: "#181818" },
           }),
       React.createElement(
         "button",
         {
-          style: {
-            ...STYLES.playBtn,
-            opacity: hovered ? 1 : 0,
-            transform: hovered ? "scale(1) translateY(0)" : "scale(0.8) translateY(6px)",
-          },
+          className: "rl-play-btn",
           onClick: handlePlay,
           title: "Play " + artist.name,
           "aria-label": "Play " + artist.name,
         },
         React.createElement(
           "svg",
-          { width: "20", height: "20", viewBox: "0 0 24 24", fill: "#000" },
-          React.createElement("path", { d: "M8 5v14l11-7z" })
+          { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor" },
+          React.createElement("polygon", { points: "5,3 19,12 5,21" })
         )
       )
     ),
-    React.createElement("div", { style: STYLES.artistCardName }, artist.name),
     React.createElement(
       "div",
-      {
-        style: {
-          ...STYLES.artistLabel,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "4px",
-          cursor: "pointer",
-          padding: "2px 8px",
-          borderRadius: "12px",
-          transition: "all 0.15s ease",
-        },
-        onClick: handleOpenSpotifyPage,
-        onMouseEnter: (e) => {
-          e.currentTarget.style.color = "var(--spice-text)";
-          e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-        },
-        onMouseLeave: (e) => {
-          e.currentTarget.style.color = "var(--spice-subtext)";
-          e.currentTarget.style.background = "transparent";
-        },
-        title: `Open ${artist.name}'s official Spotify profile`,
-      },
-      "Artist",
+      { style: { display: "flex", flexDirection: "column", gap: 4, alignItems: "center" } },
       React.createElement(
-        "svg",
-        { width: "10", height: "10", viewBox: "0 0 24 24", fill: "currentColor" },
-        React.createElement("path", {
-          d: "M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
-        })
+        "div",
+        {
+          className: "rl-card-title",
+          style: { width: "100%", textAlign: "center" },
+          title: artist.name,
+        },
+        artist.name
+      ),
+      React.createElement(
+        "div",
+        {
+          className: "rl-card-artist",
+          style: { width: "auto", textAlign: "center", fontSize: 12, color: "rgba(255, 255, 255, 0.5)" },
+          onClick: handleOpenSpotifyPage,
+          title: `Open ${artist.name}'s official Spotify profile`,
+        },
+        "Artist"
       )
     )
   );
-}
+});
 
 function FilterPills({ activeFilter, onFilterChange, typeCounts }) {
   const filters = [
@@ -1495,7 +1839,6 @@ function FilterPills({ activeFilter, onFilterChange, typeCounts }) {
     { key: "saved", label: "In Library", iconCheck: true },
     { key: "album", label: "Albums" },
     { key: "single", label: "Singles & EPs" },
-    { key: "compilation", label: "Compilations" },
     { key: "has_editions", label: "Alternative Editions", icon: true },
   ];
 
@@ -1511,6 +1854,7 @@ function FilterPills({ activeFilter, onFilterChange, typeCounts }) {
         "button",
         {
           key: f.key,
+          className: `rl-filter-pill ${active ? "active" : ""}`,
           style: {
             ...STYLES.pill(active),
             ...(isZero && !active ? { opacity: 0.55 } : {}),
@@ -1557,6 +1901,353 @@ function FilterPills({ activeFilter, onFilterChange, typeCounts }) {
   );
 }
 
+// Settings Modal Component
+function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
+  const [localColors, setLocalColors] = useState(groupColors);
+  const [syncWithReleaseList, setSyncWithReleaseList] = useState(() => {
+    const s = getStoredSettings();
+    return s.syncWithReleaseList !== false;
+  });
+  const [isClearing, setIsClearing] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handleColorChange = (key, val) => {
+    const updated = { ...localColors, [key]: val };
+    setLocalColors(updated);
+    onGroupColorsChange(updated);
+    saveStoredSettings({
+      syncWithReleaseList: false,
+      groupColors: updated,
+    });
+    setSyncWithReleaseList(false);
+  };
+
+  const handleToggleSync = (val) => {
+    setSyncWithReleaseList(val);
+    if (val) {
+      const rlColors = getGroupColors();
+      setLocalColors(rlColors);
+      onGroupColorsChange(rlColors);
+      saveStoredSettings({
+        syncWithReleaseList: true,
+        groupColors: rlColors,
+      });
+    } else {
+      saveStoredSettings({
+        syncWithReleaseList: false,
+        groupColors: localColors,
+      });
+    }
+  };
+
+  const handleClearCache = async () => {
+    setIsClearing(true);
+    try {
+      Spicetify.LocalStorage.remove("random-library:cache:albums");
+      Spicetify.LocalStorage.remove("random-library:cache:artists");
+      Spicetify.showNotification?.("Local cache cleared!");
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch {
+      setIsClearing(false);
+    }
+  };
+
+  const modalNode = React.createElement(
+    "div",
+    {
+      className: "rl-modal-backdrop",
+      onClick: (e) => {
+        if (e.target === e.currentTarget) onClose();
+      },
+    },
+    React.createElement(
+      "div",
+      { className: "rl-modal-card" },
+      // Header
+      React.createElement(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "16px 22px",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+            background: "#202020",
+            flexShrink: 0,
+          },
+        },
+        React.createElement("h2", { style: { margin: 0, fontSize: 18, fontWeight: 700 } }, "Random Library Settings"),
+        React.createElement(
+          "button",
+          {
+            onClick: onClose,
+            style: {
+              background: "transparent",
+              border: "none",
+              color: "rgba(255,255,255,0.7)",
+              fontSize: "18px",
+              cursor: "pointer",
+              padding: "4px 8px",
+              borderRadius: "4px",
+            },
+          },
+          "\u2715"
+        )
+      ),
+      // Body
+      React.createElement(
+        "div",
+        { className: "rl-modal-body" },
+        // Section 1: Badge Colors Customization
+        React.createElement(
+          "div",
+          { style: { display: "flex", flexDirection: "column", gap: 14 } },
+          React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 700, color: "#fff" } }, "Badge Colors"),
+          React.createElement(
+            "p",
+            { style: { margin: 0, fontSize: 12, color: "rgba(255,255,255,0.6)" } },
+            "Customize the badge pill colors for albums and singles/EPs across cards."
+          ),
+          // Sync toggle
+          React.createElement(
+            "label",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 13,
+                cursor: "pointer",
+                padding: "8px 12px",
+                background: "rgba(255,255,255,0.04)",
+                borderRadius: 6,
+                border: "1px solid rgba(255,255,255,0.08)",
+              },
+            },
+            React.createElement("input", {
+              type: "checkbox",
+              checked: syncWithReleaseList,
+              onChange: (e) => handleToggleSync(e.target.checked),
+              style: { cursor: "pointer" },
+            }),
+            React.createElement("span", null, "Sync badge colors with Release List settings")
+          ),
+          // Color Pickers
+          React.createElement(
+            "div",
+            { style: { display: "flex", flexDirection: "column", gap: 10, opacity: syncWithReleaseList ? 0.6 : 1 } },
+            // Album color
+            React.createElement(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 14px",
+                  background: "rgba(255,255,255,0.04)",
+                  borderRadius: 6,
+                },
+              },
+              React.createElement(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 10 } },
+                React.createElement(
+                  "span",
+                  {
+                    style: {
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      backgroundColor: localColors.album,
+                      color: getContrastYIQ(localColors.album),
+                      letterSpacing: "0.5px",
+                    },
+                  },
+                  "ALBUM"
+                ),
+                React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, "Albums")
+              ),
+              React.createElement(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 8 } },
+                React.createElement("input", {
+                  type: "color",
+                  className: "rl-color-picker",
+                  value: localColors.album,
+                  disabled: syncWithReleaseList,
+                  onChange: (e) => handleColorChange("album", e.target.value),
+                }),
+                React.createElement("input", {
+                  type: "text",
+                  className: "rl-color-hex",
+                  value: localColors.album,
+                  disabled: syncWithReleaseList,
+                  onChange: (e) => handleColorChange("album", e.target.value),
+                })
+              )
+            ),
+            // Single / EP color
+            React.createElement(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 14px",
+                  background: "rgba(255,255,255,0.04)",
+                  borderRadius: 6,
+                },
+              },
+              React.createElement(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 10 } },
+                React.createElement(
+                  "span",
+                  {
+                    style: {
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      backgroundColor: localColors.single,
+                      color: getContrastYIQ(localColors.single),
+                      letterSpacing: "0.5px",
+                    },
+                  },
+                  "SINGLE / EP"
+                ),
+                React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, "Singles & EPs")
+              ),
+              React.createElement(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 8 } },
+                React.createElement("input", {
+                  type: "color",
+                  className: "rl-color-picker",
+                  value: localColors.single,
+                  disabled: syncWithReleaseList,
+                  onChange: (e) => handleColorChange("single", e.target.value),
+                }),
+                React.createElement("input", {
+                  type: "text",
+                  className: "rl-color-hex",
+                  value: localColors.single,
+                  disabled: syncWithReleaseList,
+                  onChange: (e) => handleColorChange("single", e.target.value),
+                })
+              )
+            )
+          )
+        ),
+        // Section 2: Cache Management
+        React.createElement(
+          "div",
+          {
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              paddingTop: 16,
+            },
+          },
+          React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 700, color: "#fff" } }, "Cache Management"),
+          React.createElement(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 14px",
+                background: "rgba(255,255,255,0.04)",
+                borderRadius: 6,
+              },
+            },
+            React.createElement(
+              "div",
+              null,
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, "Reset Local Cache"),
+              React.createElement(
+                "div",
+                { style: { fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 } },
+                "Clear cached library data and followed artists"
+              )
+            ),
+            React.createElement(
+              "button",
+              {
+                className: "rl-action-btn",
+                style: {
+                  ...STYLES.actionBtn,
+                  fontSize: 12,
+                  padding: "6px 14px",
+                  borderColor: "rgba(239, 68, 68, 0.4)",
+                  color: "#ef4444",
+                },
+                onClick: handleClearCache,
+                disabled: isClearing,
+              },
+              isClearing ? "Clearing..." : "Clear Cache"
+            )
+          )
+        )
+      ),
+      // Footer
+      React.createElement(
+        "div",
+        {
+          style: {
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "12px 22px",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            background: "#1c1c1c",
+            flexShrink: 0,
+          },
+        },
+        React.createElement(
+          "button",
+          {
+            className: "rl-filter-pill active",
+            style: {
+              background: "#1ed760",
+              color: "#000",
+              border: "none",
+              borderRadius: "500px",
+              padding: "7px 18px",
+              fontSize: "13px",
+              fontWeight: 700,
+              cursor: "pointer",
+            },
+            onClick: onClose,
+          },
+          "Done"
+        )
+      )
+    )
+  );
+
+  const reactDOM = Spicetify.ReactDOM || (typeof ReactDOM !== "undefined" ? ReactDOM : null);
+  if (reactDOM && typeof reactDOM.createPortal === "function" && typeof document !== "undefined" && document.body) {
+    return reactDOM.createPortal(modalNode, document.body);
+  }
+  return modalNode;
+}
+
 // Module-level caches for search, sort, and navigation history persistence
 let cachedMainSearchQuery = "";
 let cachedArtistSearchQuery = "";
@@ -1564,10 +2255,19 @@ let cachedSortBy = "shuffle";
 let cachedHistoryStack = null;
 let cachedHistoryIndex = null;
 
+const INITIAL_BATCH_SIZE = 60;
+const LOAD_MORE_STEP = 60;
+
 // ---------------------------------------------------------------------------
 // 8. Main Application Component
 // ---------------------------------------------------------------------------
 function RandomLibraryApp() {
+  const [showSettings, setShowSettings] = useState(false);
+  const [groupColors, setGroupColors] = useState(() => getGroupColors());
+
+  const sentinelRef = useRef(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH_SIZE);
+
   const [mode, setMode] = useState(() => {
     return Spicetify.LocalStorage.get(STORAGE_ACTIVE_MODE) || "albums";
   });
@@ -1648,8 +2348,19 @@ function RandomLibraryApp() {
   const [debouncedMainQuery, setDebouncedMainQuery] = useState(() => cachedMainSearchQuery);
   const [artistSearchQuery, setArtistSearchQuery] = useState(() => cachedArtistSearchQuery);
   const [debouncedArtistQuery, setDebouncedArtistQuery] = useState(() => cachedArtistSearchQuery);
-  const [sortBy, setSortBy] = useState(() => cachedSortBy);
+  const [sortBy, setSortBy] = useState(() => {
+    if (cachedSortBy === "date-desc" || cachedSortBy === "date-asc") {
+      cachedSortBy = "shuffle";
+      return "shuffle";
+    }
+    return cachedSortBy;
+  });
   const [refreshing, setRefreshing] = useState(false);
+
+  // Reset visibleCount whenever user navigates or filters change
+  useEffect(() => {
+    setVisibleCount(INITIAL_BATCH_SIZE);
+  }, [mode, selectedArtist, sortBy, debouncedMainQuery, debouncedArtistQuery, releaseFilter]);
 
   useEffect(() => {
     cachedMainSearchQuery = mainSearchQuery;
@@ -1729,9 +2440,14 @@ function RandomLibraryApp() {
 
       if (selectedArtist) {
         setArtistReleasesLoading(true);
-        const freshReleases = await fetchArtistReleases(selectedArtist.uri, selectedArtist.name);
-        setArtistReleases(freshReleases);
-        setArtistReleasesLoading(false);
+        try {
+          const freshReleases = await fetchArtistReleases(selectedArtist.uri, selectedArtist.name);
+          setArtistReleases(freshReleases);
+        } catch (err) {
+          console.error("[Random Library] Error fetching artist releases on refresh:", err);
+        } finally {
+          setArtistReleasesLoading(false);
+        }
       }
     } catch (err) {
       console.error("[Random Library] Error during refresh:", err);
@@ -1914,10 +2630,8 @@ function RandomLibraryApp() {
     else if (sortBy === "artist-desc") list.sort((a, b) => b.artist.localeCompare(a.artist));
 
     if (debouncedMainQuery.trim()) {
-      const q = debouncedMainQuery.trim();
-      list = list.filter(
-        (a) => matchesSearchQuery(a.name, q) || matchesSearchQuery(a.artist, q)
-      );
+      const matcher = createSearchMatcher(debouncedMainQuery);
+      list = list.filter((a) => matcher(a.name) || matcher(a.artist));
     }
 
     return list;
@@ -1931,8 +2645,8 @@ function RandomLibraryApp() {
     else if (sortBy === "artist-desc" || sortBy === "name-desc") list.sort((a, b) => b.name.localeCompare(a.name));
 
     if (debouncedMainQuery.trim()) {
-      const q = debouncedMainQuery.trim();
-      list = list.filter((a) => matchesSearchQuery(a.name, q));
+      const matcher = createSearchMatcher(debouncedMainQuery);
+      list = list.filter((a) => matcher(a.name));
     }
 
     return list;
@@ -2062,6 +2776,10 @@ function RandomLibraryApp() {
         hasUpgradeAvailable: hasUpgrade,
         editions,
       };
+    }).sort((a, b) => {
+      const dateA = String(a.releaseDate || a.year || "");
+      const dateB = String(b.releaseDate || b.year || "");
+      return dateB.localeCompare(dateA);
     });
   }, [artistReleases, savedUriSet, savedExactNameSet]);
 
@@ -2093,12 +2811,130 @@ function RandomLibraryApp() {
     }
 
     if (debouncedArtistQuery.trim()) {
-      const q = debouncedArtistQuery.trim();
-      list = list.filter((a) => matchesSearchQuery(a.name, q));
+      const matcher = createSearchMatcher(debouncedArtistQuery);
+      list = list.filter((a) => matcher(a.name));
     }
 
     return list;
   }, [deduplicatedArtistReleases, releaseFilter, debouncedArtistQuery]);
+
+  // Sliced visible items for high-performance rendering (60 at a time)
+  const visibleSavedAlbums = useMemo(() => {
+    return displayedSavedAlbums.slice(0, visibleCount);
+  }, [displayedSavedAlbums, visibleCount]);
+
+  const visibleArtists = useMemo(() => {
+    return displayedArtists.slice(0, visibleCount);
+  }, [displayedArtists, visibleCount]);
+
+  const visibleArtistReleases = useMemo(() => {
+    return displayedArtistReleases.slice(0, visibleCount);
+  }, [displayedArtistReleases, visibleCount]);
+
+  const currentTotalCount = selectedArtist
+    ? displayedArtistReleases.length
+    : mode === "albums"
+    ? displayedSavedAlbums.length
+    : displayedArtists.length;
+
+  const currentVisibleCount = selectedArtist
+    ? visibleArtistReleases.length
+    : mode === "albums"
+    ? visibleSavedAlbums.length
+    : visibleArtists.length;
+
+  // IntersectionObserver for seamless infinite scrolling near bottom
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => {
+            if (prev < currentTotalCount) {
+              return Math.min(prev + LOAD_MORE_STEP, currentTotalCount);
+            }
+            return prev;
+          });
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [currentTotalCount]);
+
+  const renderPaginationFooter = () => {
+    if (currentTotalCount === 0) return null;
+    return React.createElement(
+      "div",
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "12px",
+          marginTop: "32px",
+          marginBottom: "32px",
+        },
+      },
+      // Sentinel element for IntersectionObserver
+      visibleCount < currentTotalCount &&
+        React.createElement("div", { ref: sentinelRef, style: { height: 1, width: "100%" } }),
+
+      // Status Count Counter
+      React.createElement(
+        "div",
+        { style: { fontSize: "13px", color: "var(--spice-subtext, rgba(255, 255, 255, 0.6))", fontWeight: 500 } },
+        `Showing ${currentVisibleCount} of ${currentTotalCount} ${
+          selectedArtist ? "releases" : mode === "albums" ? "saved albums" : "artists"
+        }`
+      ),
+
+      // Manual Load More / Show All Buttons
+      visibleCount < currentTotalCount &&
+        React.createElement(
+          "div",
+          { style: { display: "flex", gap: "10px" } },
+          React.createElement(
+            "button",
+            {
+              className: "rl-filter-pill active",
+              style: {
+                background: "#1ed760",
+                color: "#000",
+                border: "none",
+                borderRadius: "500px",
+                padding: "8px 22px",
+                fontSize: "13px",
+                fontWeight: 700,
+                cursor: "pointer",
+              },
+              onClick: () =>
+                setVisibleCount((prev) => Math.min(prev + LOAD_MORE_STEP, currentTotalCount)),
+            },
+            `Load More (+${Math.min(LOAD_MORE_STEP, currentTotalCount - visibleCount)})`
+          ),
+          React.createElement(
+            "button",
+            {
+              className: "rl-filter-pill",
+              style: {
+                background: "rgba(255, 255, 255, 0.08)",
+                color: "#fff",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                borderRadius: "500px",
+                padding: "8px 18px",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: "pointer",
+              },
+              onClick: () => setVisibleCount(currentTotalCount),
+            },
+            "Show All"
+          )
+        )
+    );
+  };
 
   const hasArtistFilters = artistSearchQuery.trim() !== "" || releaseFilter !== "all";
   const hasMainFilters = mainSearchQuery.trim() !== "" || sortBy !== "shuffle";
@@ -2131,6 +2967,26 @@ function RandomLibraryApp() {
       "Error: " + error
     );
   }
+
+  const renderSettingsBtn = () =>
+    React.createElement(
+      "button",
+      {
+        className: "rl-action-btn",
+        style: STYLES.actionBtn,
+        onClick: () => setShowSettings(true),
+        title: "Random Library Settings",
+        "aria-label": "Settings",
+      },
+      React.createElement(
+        "svg",
+        { width: "15", height: "15", viewBox: "0 0 24 24", fill: "currentColor" },
+        React.createElement("path", {
+          d: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+        })
+      ),
+      "Settings"
+    );
 
   return React.createElement(
     "div",
@@ -2165,6 +3021,7 @@ function RandomLibraryApp() {
           React.createElement(
             "button",
             {
+              className: `rl-mode-btn ${mode === "albums" ? "active" : ""}`,
               style: STYLES.modeBtn(mode === "albums"),
               onClick: () => handleModeChange("albums"),
             },
@@ -2173,6 +3030,7 @@ function RandomLibraryApp() {
           React.createElement(
             "button",
             {
+              className: `rl-mode-btn ${mode === "artists" ? "active" : ""}`,
               style: STYLES.modeBtn(mode === "artists"),
               onClick: () => handleModeChange("artists"),
             },
@@ -2261,6 +3119,7 @@ function RandomLibraryApp() {
         React.createElement(
           "button",
           {
+            className: "rl-action-btn",
             style: {
               ...STYLES.actionBtn,
               opacity: refreshing ? 0.6 : 1,
@@ -2400,6 +3259,7 @@ function RandomLibraryApp() {
           React.createElement(
             "div",
             {
+              className: "rl-banner-artist-link",
               style: { ...STYLES.artistBannerName, cursor: "pointer", display: "inline-block" },
               onClick: () => {
                 const id = selectedArtist.uri ? selectedArtist.uri.split(":").pop() : selectedArtist.id;
@@ -2446,7 +3306,8 @@ function RandomLibraryApp() {
               onClick: () => Spicetify.Player.playUri(selectedArtist.uri),
             },
             "Play Artist"
-          )
+          ),
+          renderSettingsBtn()
         )
       ),
 
@@ -2464,26 +3325,30 @@ function RandomLibraryApp() {
           { style: STYLES.controlsRow },
           React.createElement(
             "div",
-            { style: STYLES.searchWrapper },
+            { style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", flex: "1 1 auto" } },
             React.createElement(
-              "svg",
-              { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
-              React.createElement("path", {
-                d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+              "div",
+              { style: STYLES.searchWrapper },
+              React.createElement(
+                "svg",
+                { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", {
+                  d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+                })
+              ),
+              React.createElement("input", {
+                type: "text",
+                placeholder: `Search in ${selectedArtist.name} releases\u2026`,
+                value: artistSearchQuery,
+                onChange: (e) => setArtistSearchQuery(e.target.value),
+                style: STYLES.searchInput,
               })
             ),
-            React.createElement("input", {
-              type: "text",
-              placeholder: `Search in ${selectedArtist.name} releases\u2026`,
-              value: artistSearchQuery,
-              onChange: (e) => setArtistSearchQuery(e.target.value),
-              style: STYLES.searchInput,
-            })
-          ),
-          hasArtistFilters && React.createElement(
-            "button",
-            { style: STYLES.clearBtn, onClick: handleClearArtistFilters },
-            "Clear filters"
+            hasArtistFilters && React.createElement(
+              "button",
+              { style: STYLES.clearBtn, onClick: handleClearArtistFilters },
+              "Clear filters"
+            )
           )
         )
       ),
@@ -2499,14 +3364,17 @@ function RandomLibraryApp() {
       !artistReleasesLoading && displayedArtistReleases.length > 0 && React.createElement(
         "div",
         { style: STYLES.grid, className: "rl-grid main-gridContainer-gridContainer" },
-        displayedArtistReleases.map((album, i) =>
+        visibleArtistReleases.map((album) =>
           React.createElement(AlbumCard, {
-            key: `${album.uri}-${i}`,
+            key: album.uri,
             album,
             isSaved: Boolean(album.isSaved || isAlbumSaved(album)),
+            groupColors,
           })
         )
       ),
+
+      !artistReleasesLoading && renderPaginationFooter(),
 
       !artistReleasesLoading && displayedArtistReleases.length === 0 && React.createElement(
         "div",
@@ -2530,52 +3398,57 @@ function RandomLibraryApp() {
           { style: STYLES.controlsRow },
           React.createElement(
             "div",
-            { style: STYLES.searchWrapper },
+            { style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", flex: "1 1 auto" } },
             React.createElement(
-              "svg",
-              { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
-              React.createElement("path", {
-                d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+              "div",
+              { style: STYLES.searchWrapper },
+              React.createElement(
+                "svg",
+                { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", {
+                  d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+                })
+              ),
+              React.createElement("input", {
+                type: "text",
+                placeholder: "Search followed artists\u2026",
+                value: mainSearchQuery,
+                onChange: (e) => setMainSearchQuery(e.target.value),
+                style: STYLES.searchInput,
               })
             ),
-            React.createElement("input", {
-              type: "text",
-              placeholder: "Search followed artists\u2026",
-              value: mainSearchQuery,
-              onChange: (e) => setMainSearchQuery(e.target.value),
-              style: STYLES.searchInput,
-            })
-          ),
 
-          React.createElement(
-            "div",
-            { style: STYLES.selectWrapper },
             React.createElement(
-              "select",
-              {
-                value: sortBy,
-                onChange: (e) => {
-                  setSortBy(e.target.value);
-                  cachedSortBy = e.target.value;
+              "div",
+              { style: STYLES.selectWrapper },
+              React.createElement(
+                "select",
+                {
+                  value: sortBy,
+                  onChange: (e) => {
+                    setSortBy(e.target.value);
+                    cachedSortBy = e.target.value;
+                  },
+                  style: STYLES.select,
                 },
-                style: STYLES.select,
-              },
-              React.createElement("option", { value: "shuffle" }, "Shuffled"),
-              React.createElement("option", { value: "artist-asc" }, "Artist A\u2013Z"),
-              React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A")
+                React.createElement("option", { value: "shuffle" }, "Shuffled"),
+                React.createElement("option", { value: "artist-asc" }, "Artist A\u2013Z"),
+                React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A")
+              ),
+              React.createElement(
+                "svg",
+                { style: STYLES.selectChevron, width: "12", height: "12", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", { d: "M7 10l5 5 5-5z" })
+              )
             ),
-            React.createElement(
-              "svg",
-              { style: STYLES.selectChevron, width: "12", height: "12", viewBox: "0 0 24 24", fill: "currentColor" },
-              React.createElement("path", { d: "M7 10l5 5 5-5z" })
+
+            hasMainFilters && React.createElement(
+              "button",
+              { style: STYLES.clearBtn, onClick: handleClearMainFilters },
+              "Clear filters"
             )
           ),
-
-          hasMainFilters && React.createElement(
-            "button",
-            { style: STYLES.clearBtn, onClick: handleClearMainFilters },
-            "Clear filters"
-          )
+          renderSettingsBtn()
         )
       ),
 
@@ -2583,14 +3456,16 @@ function RandomLibraryApp() {
       displayedArtists.length > 0 && React.createElement(
         "div",
         { style: STYLES.grid, className: "rl-grid main-gridContainer-gridContainer" },
-        displayedArtists.map((artist, i) =>
+        visibleArtists.map((artist) =>
           React.createElement(ArtistCard, {
-            key: `${artist.uri}-${i}`,
+            key: artist.uri || artist.id,
             artist,
             onClick: handleOpenArtist,
           })
         )
       ),
+
+      renderPaginationFooter(),
 
       displayedArtists.length === 0 && React.createElement(
         "div",
@@ -2614,54 +3489,59 @@ function RandomLibraryApp() {
           { style: STYLES.controlsRow },
           React.createElement(
             "div",
-            { style: STYLES.searchWrapper },
+            { style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", flex: "1 1 auto" } },
             React.createElement(
-              "svg",
-              { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
-              React.createElement("path", {
-                d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+              "div",
+              { style: STYLES.searchWrapper },
+              React.createElement(
+                "svg",
+                { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", {
+                  d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+                })
+              ),
+              React.createElement("input", {
+                type: "text",
+                placeholder: "Search albums or artists\u2026",
+                value: mainSearchQuery,
+                onChange: (e) => setMainSearchQuery(e.target.value),
+                style: STYLES.searchInput,
               })
             ),
-            React.createElement("input", {
-              type: "text",
-              placeholder: "Search albums or artists\u2026",
-              value: mainSearchQuery,
-              onChange: (e) => setMainSearchQuery(e.target.value),
-              style: STYLES.searchInput,
-            })
-          ),
 
-          React.createElement(
-            "div",
-            { style: STYLES.selectWrapper },
             React.createElement(
-              "select",
-              {
-                value: sortBy,
-                onChange: (e) => {
-                  setSortBy(e.target.value);
-                  cachedSortBy = e.target.value;
+              "div",
+              { style: STYLES.selectWrapper },
+              React.createElement(
+                "select",
+                {
+                  value: sortBy,
+                  onChange: (e) => {
+                    setSortBy(e.target.value);
+                    cachedSortBy = e.target.value;
+                  },
+                  style: STYLES.select,
                 },
-                style: STYLES.select,
-              },
-              React.createElement("option", { value: "shuffle" }, "Shuffled"),
-              React.createElement("option", { value: "name-asc" }, "Album A\u2013Z"),
-              React.createElement("option", { value: "name-desc" }, "Album Z\u2013A"),
-              React.createElement("option", { value: "artist-asc" }, "Artist A\u2013Z"),
-              React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A")
+                React.createElement("option", { value: "shuffle" }, "Shuffled"),
+                React.createElement("option", { value: "name-asc" }, "Album A\u2013Z"),
+                React.createElement("option", { value: "name-desc" }, "Album Z\u2013A"),
+                React.createElement("option", { value: "artist-asc" }, "Artist A\u2013Z"),
+                React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A")
+              ),
+              React.createElement(
+                "svg",
+                { style: STYLES.selectChevron, width: "12", height: "12", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", { d: "M7 10l5 5 5-5z" })
+              )
             ),
-            React.createElement(
-              "svg",
-              { style: STYLES.selectChevron, width: "12", height: "12", viewBox: "0 0 24 24", fill: "currentColor" },
-              React.createElement("path", { d: "M7 10l5 5 5-5z" })
+
+            hasMainFilters && React.createElement(
+              "button",
+              { style: STYLES.clearBtn, onClick: handleClearMainFilters },
+              "Clear filters"
             )
           ),
-
-          hasMainFilters && React.createElement(
-            "button",
-            { style: STYLES.clearBtn, onClick: handleClearMainFilters },
-            "Clear filters"
-          )
+          renderSettingsBtn()
         )
       ),
 
@@ -2669,21 +3549,32 @@ function RandomLibraryApp() {
       displayedSavedAlbums.length > 0 && React.createElement(
         "div",
         { style: STYLES.grid, className: "rl-grid main-gridContainer-gridContainer" },
-        displayedSavedAlbums.map((album, i) =>
+        visibleSavedAlbums.map((album) =>
           React.createElement(AlbumCard, {
-            key: `${album.uri}-${i}`,
+            key: album.uri,
             album,
             isSaved: true,
+            groupColors,
           })
         )
       ),
+
+      renderPaginationFooter(),
 
       displayedSavedAlbums.length === 0 && React.createElement(
         "div",
         { style: STYLES.loadingContainer },
         "No saved albums match your search."
       )
-    )
+    ),
+
+    // Settings Modal Portal (rendered at top level so it works from any view)
+    showSettings &&
+      React.createElement(SettingsModal, {
+        onClose: () => setShowSettings(false),
+        groupColors,
+        onGroupColorsChange: (newColors) => setGroupColors(newColors),
+      })
   );
 }
 
