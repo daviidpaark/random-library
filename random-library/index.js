@@ -258,7 +258,7 @@ if (typeof document !== "undefined" && !document.getElementById("random-library-
       padding: 0 !important;
       box-sizing: border-box !important;
       color: var(--spice-text, #ffffff);
-      font-family: var(--font-family, spotify-circular, Helvetica, Arial, sans-serif);
+      font-family: var(--encore-body-font-stack, sans-serif);
     }
     .rl-modal-card {
       background: #181818 !important;
