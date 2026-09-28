@@ -731,11 +731,13 @@ function registerExportMenu() {
 }
 
 // Initialize export menu in Spicetify Profile Menu
-(function initExportMenu() {
+(function initExportMenu(attempt = 0) {
   if (typeof Spicetify !== "undefined" && Spicetify.Menu && (Spicetify.Menu.SubMenu || Spicetify.Menu.Item)) {
     registerExportMenu();
+  } else if (attempt < 20) {
+    setTimeout(() => initExportMenu(attempt + 1), 500);
   } else {
-    setTimeout(initExportMenu, 500);
+    console.warn("[Random Library] Spicetify.Menu unavailable; export menu not registered.");
   }
 })();
 
@@ -778,6 +780,144 @@ async function fetchAllFollowedArtists(onProgress) {
   }
 
   return artists;
+}
+
+// ---------------------------------------------------------------------------
+// 4b. Saved Album Metadata (release date + track count)
+// LibraryAPI.getContents omits both. Seed from Release List's IndexedDB cache when
+// present, look up the rest once via GraphQL getAlbum, and persist the results.
+// ---------------------------------------------------------------------------
+const STORAGE_ALBUM_META = "random-library:album-meta";
+const ALBUM_META_CONCURRENCY = 4;
+const ALBUM_META_FLUSH_MS = 1000;
+let albumMetaCache = null; // Map uri -> { releaseDate, trackCount }
+let albumMetaRunning = false;
+let albumMetaListener = null;
+
+function loadAlbumMeta() {
+  if (albumMetaCache) return albumMetaCache;
+  albumMetaCache = new Map();
+  try {
+    const raw = JSON.parse(Spicetify.LocalStorage.get(STORAGE_ALBUM_META) || "{}");
+    for (const [uri, [releaseDate, trackCount]] of Object.entries(raw)) {
+      albumMetaCache.set(uri, { releaseDate, trackCount });
+    }
+  } catch {}
+  return albumMetaCache;
+}
+
+function saveAlbumMeta() {
+  try {
+    const raw = {};
+    for (const [uri, m] of albumMetaCache) raw[uri] = [m.releaseDate, m.trackCount];
+    Spicetify.LocalStorage.set(STORAGE_ALBUM_META, JSON.stringify(raw));
+  } catch {}
+}
+
+// Read-only access to Release List's catalog; never creates or upgrades its database
+function readReleaseListCatalog() {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open("ReleaseListDB");
+      request.onupgradeneeded = () => request.transaction.abort();
+      request.onerror = () => resolve([]);
+      request.onsuccess = () => {
+        const db = request.result;
+        try {
+          if (!db.objectStoreNames.contains("cache")) {
+            db.close();
+            return resolve([]);
+          }
+          const get = db.transaction("cache", "readonly").objectStore("cache").get("releases_catalog");
+          get.onsuccess = () => {
+            db.close();
+            resolve(Array.isArray(get.result?.items) ? get.result.items : []);
+          };
+          get.onerror = () => {
+            db.close();
+            resolve([]);
+          };
+        } catch {
+          db.close();
+          resolve([]);
+        }
+      };
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+function formatAlbumDate(date) {
+  const iso = date?.isoString?.split("T")[0] || "";
+  if (!iso) return date?.year ? String(date.year) : "";
+  if (date.precision === "YEAR") return iso.slice(0, 4);
+  if (date.precision === "MONTH") return iso.slice(0, 7);
+  return iso;
+}
+
+async function fetchAlbumMeta(uri) {
+  try {
+    const { data } = await Spicetify.GraphQL.Request(Spicetify.GraphQL.Definitions.getAlbum, {
+      uri,
+      locale: Spicetify.Locale?.getLocale?.() || "en",
+      offset: 0,
+      limit: 1,
+    });
+    const album = data?.albumUnion;
+    if (!album) return null;
+    return { releaseDate: formatAlbumDate(album.date), trackCount: album.tracksV2?.totalCount || 0 };
+  } catch {
+    return null;
+  }
+}
+
+// Fill in metadata for saved albums that lack it; albumMetaListener is notified as results arrive
+async function enrichSavedAlbums(albums) {
+  const meta = loadAlbumMeta();
+  const savedUris = new Set(albums.map((a) => a.uri));
+  for (const uri of [...meta.keys()]) {
+    if (!savedUris.has(uri)) meta.delete(uri);
+  }
+  if (albumMetaRunning) return;
+  albumMetaRunning = true;
+
+  try {
+    let missing = albums.filter((a) => !meta.has(a.uri)).map((a) => a.uri);
+    if (missing.length === 0) return;
+
+    const catalog = await readReleaseListCatalog();
+    for (const item of catalog) {
+      if (item?.uri && item.dateStr && savedUris.has(item.uri) && !meta.has(item.uri)) {
+        meta.set(item.uri, { releaseDate: item.dateStr, trackCount: item.trackCount || 0 });
+      }
+    }
+    missing = missing.filter((uri) => !meta.has(uri));
+    saveAlbumMeta();
+    albumMetaListener?.();
+
+    if (missing.length === 0 || !Spicetify.GraphQL?.Definitions?.getAlbum) return;
+
+    let next = 0;
+    let lastFlush = Date.now();
+    const worker = async () => {
+      while (next < missing.length) {
+        const uri = missing[next++];
+        const result = await fetchAlbumMeta(uri);
+        if (result) meta.set(uri, result);
+        if (Date.now() - lastFlush >= ALBUM_META_FLUSH_MS) {
+          lastFlush = Date.now();
+          saveAlbumMeta();
+          albumMetaListener?.();
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: ALBUM_META_CONCURRENCY }, worker));
+    saveAlbumMeta();
+    albumMetaListener?.();
+  } finally {
+    albumMetaRunning = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -941,6 +1081,7 @@ async function fetchArtistReleases(artistUri, artistName = "") {
               imageUrl: coverUrl,
               type: normType,
               releaseDate: dateStr,
+              trackCount: item.tracks?.totalCount || 0,
             });
           }
         }
@@ -1010,6 +1151,7 @@ async function fetchArtistReleases(artistUri, artistName = "") {
               imageUrl: coverUrl,
               type: normType,
               releaseDate: dateStr,
+              trackCount: item.tracks?.totalCount || 0,
             });
           }
         }
@@ -1065,6 +1207,7 @@ async function fetchArtistReleases(artistUri, artistName = "") {
                   imageUrl: item.images?.[0]?.url || item.images?.[1]?.url || "",
                   type: classifyRelease(item, group),
                   releaseDate: item.release_date || item.releaseDate || "",
+                  trackCount: item.total_tracks || 0,
                 });
               }
             }
@@ -1528,6 +1671,7 @@ const STYLES = {
 
 const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupColors = null }) {
   const [showEditions, setShowEditions] = useState(false);
+  const trackCount = album.trackCount || 0;
 
   function handleClick(e) {
     if (e.target.closest("button") || e.target.closest(".rl-play-btn") || e.target.closest(".rl-card-artist") || e.target.closest(".rl-edition-badge") || showEditions) return;
@@ -1675,6 +1819,17 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
             },
             typeBadge.label
           ),
+          trackCount > 1 &&
+            React.createElement(
+              "span",
+              {
+                style: {
+                  fontSize: 11,
+                  color: "rgba(255, 255, 255, 0.5)",
+                },
+              },
+              `${trackCount} tracks`
+            ),
           // Edition Switcher Button
           hasEditions &&
             React.createElement(
@@ -1695,6 +1850,16 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
               ),
               album.hasUpgradeAvailable ? "Deluxe" : `${album.editions.length} Eds ▾`
             )
+        ),
+        React.createElement(
+          "span",
+          {
+            style: {
+              fontSize: 12,
+              color: "rgba(255, 255, 255, 0.5)",
+            },
+          },
+          album.releaseDate || album.year || ""
         )
       ),
       // Edition Dropdown (shown when opened)
@@ -2348,13 +2513,8 @@ function RandomLibraryApp() {
   const [debouncedMainQuery, setDebouncedMainQuery] = useState(() => cachedMainSearchQuery);
   const [artistSearchQuery, setArtistSearchQuery] = useState(() => cachedArtistSearchQuery);
   const [debouncedArtistQuery, setDebouncedArtistQuery] = useState(() => cachedArtistSearchQuery);
-  const [sortBy, setSortBy] = useState(() => {
-    if (cachedSortBy === "date-desc" || cachedSortBy === "date-asc") {
-      cachedSortBy = "shuffle";
-      return "shuffle";
-    }
-    return cachedSortBy;
-  });
+  const [sortBy, setSortBy] = useState(() => cachedSortBy);
+  const [albumMetaVersion, setAlbumMetaVersion] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   // Reset visibleCount whenever user navigates or filters change
@@ -2620,11 +2780,41 @@ function RandomLibraryApp() {
     }
   }, [mode, savedAlbums, followedArtists]);
 
+  // Saved album release dates & track counts (filled in the background)
+  useEffect(() => {
+    albumMetaListener = () => setAlbumMetaVersion((v) => v + 1);
+    return () => {
+      albumMetaListener = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (savedAlbums.length > 0) enrichSavedAlbums(savedAlbums);
+  }, [savedAlbums]);
+
+  const albumMetaProgress = useMemo(() => {
+    const meta = loadAlbumMeta();
+    return { known: savedAlbums.filter((a) => meta.has(a.uri)).length, total: savedAlbums.length };
+  }, [savedAlbums, albumMetaVersion]);
+
   // Filter & Sort: Albums Mode
   const displayedSavedAlbums = useMemo(() => {
-    let list = sortBy === "shuffle" ? [...savedShuffled] : [...savedAlbums];
+    const meta = loadAlbumMeta();
+    const withMeta = (a) => {
+      const m = meta.get(a.uri);
+      return m ? { ...a, releaseDate: m.releaseDate || a.releaseDate, trackCount: m.trackCount || a.trackCount } : a;
+    };
+    let list = (sortBy === "shuffle" ? savedShuffled : savedAlbums).map(withMeta);
 
-    if (sortBy === "name-asc") list.sort((a, b) => a.name.localeCompare(b.name));
+    if (sortBy === "date-desc" || sortBy === "date-asc") {
+      // Undated albums go last in both directions
+      const dir = sortBy === "date-desc" ? -1 : 1;
+      list.sort((a, b) => {
+        if (!a.releaseDate) return b.releaseDate ? 1 : 0;
+        if (!b.releaseDate) return -1;
+        return dir * a.releaseDate.localeCompare(b.releaseDate);
+      });
+    } else if (sortBy === "name-asc") list.sort((a, b) => a.name.localeCompare(b.name));
     else if (sortBy === "name-desc") list.sort((a, b) => b.name.localeCompare(a.name));
     else if (sortBy === "artist-asc") list.sort((a, b) => a.artist.localeCompare(b.artist));
     else if (sortBy === "artist-desc") list.sort((a, b) => b.artist.localeCompare(a.artist));
@@ -2635,11 +2825,11 @@ function RandomLibraryApp() {
     }
 
     return list;
-  }, [savedShuffled, savedAlbums, sortBy, debouncedMainQuery]);
+  }, [savedShuffled, savedAlbums, sortBy, debouncedMainQuery, albumMetaVersion]);
 
   // Filter & Sort: Artists Mode
   const displayedArtists = useMemo(() => {
-    let list = sortBy === "shuffle" ? [...followedArtistsShuffled] : [...followedArtists];
+    let list = sortBy === "shuffle" || sortBy.startsWith("date-") ? [...followedArtistsShuffled] : [...followedArtists];
 
     if (sortBy === "artist-asc" || sortBy === "name-asc") list.sort((a, b) => a.name.localeCompare(b.name));
     else if (sortBy === "artist-desc" || sortBy === "name-desc") list.sort((a, b) => b.name.localeCompare(a.name));
@@ -2857,7 +3047,7 @@ function RandomLibraryApp() {
           });
         }
       },
-      { rootMargin: "600px" }
+      { rootMargin: "2000px" }
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
@@ -3010,7 +3200,10 @@ function RandomLibraryApp() {
             selectedArtist
               ? `${displayedArtistReleases.length} releases for ${selectedArtist.name}`
               : mode === "albums"
-              ? `${displayedSavedAlbums.length} saved albums ${sortBy === "shuffle" ? "shuffled" : "listed"}`
+              ? `${displayedSavedAlbums.length} saved albums ${sortBy === "shuffle" ? "shuffled" : "listed"}` +
+                (albumMetaProgress.known < albumMetaProgress.total
+                  ? ` \u00b7 loading release dates ${albumMetaProgress.known}/${albumMetaProgress.total}`
+                  : "")
               : `${displayedArtists.length} followed artists ${sortBy === "shuffle" ? "shuffled" : "listed"}`
           )
         ),
@@ -3424,7 +3617,7 @@ function RandomLibraryApp() {
               React.createElement(
                 "select",
                 {
-                  value: sortBy,
+                  value: sortBy.startsWith("date-") ? "shuffle" : sortBy,
                   onChange: (e) => {
                     setSortBy(e.target.value);
                     cachedSortBy = e.target.value;
@@ -3526,7 +3719,9 @@ function RandomLibraryApp() {
                 React.createElement("option", { value: "name-asc" }, "Album A\u2013Z"),
                 React.createElement("option", { value: "name-desc" }, "Album Z\u2013A"),
                 React.createElement("option", { value: "artist-asc" }, "Artist A\u2013Z"),
-                React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A")
+                React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A"),
+                React.createElement("option", { value: "date-desc" }, "Newest first"),
+                React.createElement("option", { value: "date-asc" }, "Oldest first")
               ),
               React.createElement(
                 "svg",

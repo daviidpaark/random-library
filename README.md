@@ -36,7 +36,7 @@ A Spicetify custom app that displays your saved Spotify albums and followed arti
 - **Persistent Shuffle** — Shuffle order is preserved across app relaunches and sessions.
 - **Search & Sort**
   - Real-time debounced search by album title or artist name.
-  - Multi-column sort options: *Shuffled*, *Album A–Z / Z–A*, or *Artist A–Z / Z–A*.
+  - Multi-column sort options: *Shuffled*, *Album A–Z / Z–A*, *Artist A–Z / Z–A*, or release date (*Newest* / *Oldest first*). Saved album release dates and track counts load once in the background and are cached.
 - **Play on Hover** — Hover over any album or artist card and click the green play button to start playback immediately.
 
 ## Requirements
