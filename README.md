@@ -1,43 +1,42 @@
 # Random Library
 
-A Spicetify custom app that displays your saved Spotify albums and followed artists in a fast, shuffled, filterable grid with on-demand discography exploration, smart edition prioritization, and random discovery. Find it in the left sidebar under the shuffle icon.
+A Spicetify custom app that displays your saved Spotify albums and followed artists in a shuffled, filterable grid with on-demand artist discographies, edition deduplication, and random discovery. Find it in the left sidebar under the shuffle icon.
+
+Companion to [Release List](https://github.com/daviidpaark/release-list); both apps share the same card and artwork design.
 
 ## Features
 
-- **Standardized Modes**
-  - **`Albums`** — Instant local library view of all your saved albums.
-  - **`Artists`** — Shuffled grid of all the artists you follow with instant local loading.
-- **Symmetric Randomization**
-  - In **Albums** mode: Click **`Random Album`** to pick and open a random album from your saved collection.
-  - In **Artists** mode: Click **`Random Artist`** to pick a random followed artist and open their complete discography.
-- **In-App Random Navigation History (`◀ Previous` / `Next ▶`)**
-  - Seamlessly step backward and forward through your past random artist rolls without exiting the app.
-  - Interactive step counter (e.g. `3 of 5`) and instant 0ms cached loading.
-- **On-Demand Artist Discography & Native Release Filters**
-  - Click any followed artist to open their complete discography right inside the app.
-  - Native Spotify catalog categories:
-    - `All`
-    - `✓ In Library` (Isolates all releases by this artist saved in your library)
-    - `Albums` (Studio albums)
-    - `Singles & EPs`
-    - `Alternative Editions` (Releases featuring multiple expanded or deluxe editions)
-- **Smart Edition & Deluxe Prioritization**
-  - Automatically deduplicates multiple versions of the same album (standard, deluxe, expanded, anniversary, remastered).
-  - Prioritizes your exact saved library version if present; otherwise defaults to the most complete Deluxe/Expanded edition.
-  - Includes an interactive **`Edition ▾`** dropdown on album cards to switch between alternative releases on the fly.
-  - Visual **`✓`** badge on covers and dropdown items indicating library status.
-- **Streamlined Artwork & Card Format (Shared with Release List)**
-  - Unobstructed album art with smooth hover scale (`1.03x`), sliding green Play (▶) button, and `✓` in-library badge.
-  - Dedicated bottom metadata row with a release type badge (`ALBUM` or `SINGLE / EP`) and an interactive edition switcher.
-  - Sleek hover elevation (`translateY(-3px)`) and subtle translucent borders.
-- **Continuous Filter Randomization** — Selected release filters (e.g. *Albums*, *Singles & EPs*, or *In Library*) persist across **Random Artist** rolls, enabling continuous randomized discovery within a specific category.
-- **Instant Library Sync / Refresh** — Click **`Refresh`** to sync newly saved albums and followed artists from Spotify in real time (also clears random navigation history).
-- **Fluid Responsive Grid Scaling** — Cards, icons, and avatars automatically scale from ultra-wide & 4K displays down to compact split-screen windows.
-- **Persistent Shuffle** — Shuffle order is preserved across app relaunches and sessions.
-- **Search & Sort**
-  - Real-time debounced search by album title or artist name.
-  - Multi-column sort options: *Shuffled*, *Album A–Z / Z–A*, *Artist A–Z / Z–A*, or release date (*Newest* / *Oldest first*). Saved album release dates and track counts load once in the background and are cached.
-- **Play on Hover** — Hover over any album or artist card and click the green play button to start playback immediately.
+- **Albums and Artists Modes**
+  - **`Albums`**: Your saved albums, loaded from the local library.
+  - **`Artists`**: A shuffled grid of the artists you follow.
+- **Random Picks**
+  - **`Random Album`** opens a random album from your saved collection.
+  - **`Random Artist`** opens the full discography of a random followed artist.
+  - Step back and forward through past random artists with **`◀ Previous`** / **`Next ▶`** and a step counter (e.g. `3 of 5`).
+  - Selected release filters persist across **Random Artist** rolls, so you can keep discovering within one category.
+- **Artist Discography**
+  - Click any followed artist to open their discography inside the app.
+  - Filter by `All`, `✓ In Library`, `Albums`, `Singles & EPs`, or `Alternative Editions`.
+- **Edition Deduplication**
+  - Groups standard, deluxe, expanded, anniversary, and remastered versions of the same album.
+  - Shows your saved version when present; otherwise the most complete edition.
+  - Switch between versions with the **`Edition ▾`** dropdown on album cards.
+- **Cards and Artwork**
+  - Hover to reveal a green play button that starts playback immediately.
+  - `✓` badge on covers and edition dropdown items that are in your library.
+  - Release type badge (`ALBUM` or `SINGLE / EP`) below each cover.
+  - The grid scales from ultra-wide displays down to compact split-screen windows.
+- **Search and Sort**
+  - Debounced search by album title or artist name.
+  - Sort by *Shuffled*, *Album A–Z / Z–A*, *Artist A–Z / Z–A*, or release date (*Newest* / *Oldest first*).
+  - Shuffle order is preserved across Spotify restarts.
+- **Refresh**: Click **`Refresh`** to sync newly saved albums and followed artists from Spotify (also clears random navigation history).
+- **Export**: Export your saved albums as JSON or CSV from the **Export Saved Albums** entry in the profile menu.
+
+## How It Works
+
+- Saved album release dates and track counts load once in the background and are cached locally.
+- If [Release List](https://github.com/daviidpaark/release-list) is installed, Random Library reuses its cached release data (read-only) before requesting anything from Spotify.
 
 ## Requirements
 
@@ -46,52 +45,50 @@ A Spicetify custom app that displays your saved Spotify albums and followed arti
 
 ## Install
 
-**Windows (PowerShell)**
+### Windows (PowerShell)
+
 ```powershell
 iwr -useb "https://raw.githubusercontent.com/daviidpaark/random-library/main/install.ps1" | iex
 ```
 
-**macOS / Linux**
+### macOS / Linux
+
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/daviidpaark/random-library/main/install.sh" | bash
 ```
 
 The script will:
+
 1. Verify `spicetify` is in your PATH and locate your `config-xpui.ini`
-2. Copy or download `index.js` and `manifest.json` into your Spicetify `CustomApps/random-library/` folder
-3. Clean legacy `random-albums` registrations and register `random-library` in `config-xpui.ini`
+2. Download `index.js` and `manifest.json` into your Spicetify `CustomApps/random-library/` folder
+3. Remove the legacy `random-albums` app and register `random-library` in `config-xpui.ini`
 4. Run `spicetify apply`
 
 Restart Spotify if it was already open.
 
 ## Uninstall
 
-**Windows (PowerShell)**
+### Windows (PowerShell)
+
 ```powershell
 iwr -useb "https://raw.githubusercontent.com/daviidpaark/random-library/main/uninstall.ps1" | iex
 ```
 
-**macOS / Linux**
+### macOS / Linux
+
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/daviidpaark/random-library/main/uninstall.sh" | bash
 ```
-
----
 
 ## Disclaimer
 
 This project is an independent, open-source custom app and is not affiliated with, sponsored by, or endorsed by Spotify. Spotify is a registered trademark of Spotify AB.
 
----
-
-## AI Disclosure & Personal Project Note
+## AI Disclosure
 
 > [!NOTE]
-> This project was developed as a personal project with the assistance of **GitHub Copilot (Claude Sonnet / Opus)** and **Google Antigravity (Gemini Flash / Pro)** AI pair programming. It is shared publicly for the benefit of the community and other Spotify and Spicetify users. Contributions, feedback, and issue reports are always welcome!
-
----
+> This is a personal homelab project developed with the assistance of **GitHub Copilot (Claude Sonnet / Opus)**, **Google Antigravity (Gemini Flash / Pro)**, and **Claude Code (Claude Opus)**. It is shared publicly for other Spotify and Spicetify users. Feedback and issue reports are welcome.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
-
+[MIT License](LICENSE) © 2026 David Park
