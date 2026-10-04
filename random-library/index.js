@@ -55,22 +55,16 @@ if (typeof document !== "undefined" && !document.getElementById("random-library-
     /* High-Performance Card (Identical to Release List) */
     .rl-card {
       position: relative;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      border-radius: 8px;
-      padding: 14px;
-      transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+      padding: 0 0 8px;
+      transition: transform 0.18s ease;
       display: flex;
       flex-direction: column;
+      min-width: 0;
       cursor: pointer;
-      overflow: hidden;
       user-select: none;
     }
     .rl-card:hover {
-      background: rgba(255, 255, 255, 0.09);
-      border-color: rgba(255, 255, 255, 0.16);
       transform: translateY(-3px);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
     }
 
     .rl-card-artwork-wrapper {
@@ -191,6 +185,7 @@ if (typeof document !== "undefined" && !document.getElementById("random-library-
       display: inline-block;
       width: fit-content;
       max-width: 100%;
+      min-width: 0;
       transition: color 0.15s ease, text-decoration 0.15s ease;
     }
     .rl-card-artist:hover {
@@ -351,10 +346,34 @@ function fisherYatesShuffle(array) {
 // ---------------------------------------------------------------------------
 // 1b. Shared Release List Integration & Design Helpers (ReleaseListDB)
 // ---------------------------------------------------------------------------
+const RELEASE_TYPES = ["album", "ep", "single"];
+
+const TYPE_LABELS = {
+  album: "ALBUM",
+  ep: "EP",
+  single: "SINGLE",
+};
+
 const DEFAULT_GROUP_COLORS = {
   album: "#8b5cf6",
+  ep: "#38bdf8",
   single: "#10b981",
 };
+
+function withDefaultColors(colors) {
+  return {
+    album: colors.album || DEFAULT_GROUP_COLORS.album,
+    ep: colors.ep || DEFAULT_GROUP_COLORS.ep,
+    single: colors.single || DEFAULT_GROUP_COLORS.single,
+  };
+}
+
+// Spotify files EPs under singles; a "single" with this many tracks is treated as an EP
+const EP_MIN_TRACKS = 4;
+
+function splitEpType(type, trackCount) {
+  return type === "single" && trackCount >= EP_MIN_TRACKS ? "ep" : type;
+}
 
 function getContrastYIQ(hexcolor) {
   const hex = (hexcolor || "#000000").replace("#", "");
@@ -385,27 +404,14 @@ function getGroupColors() {
   try {
     const local = getStoredSettings();
     if (local?.syncWithReleaseList === false && local?.groupColors) {
-      return {
-        album: local.groupColors.album || DEFAULT_GROUP_COLORS.album,
-        single: local.groupColors.single || DEFAULT_GROUP_COLORS.single,
-      };
+      return withDefaultColors(local.groupColors);
     }
     const raw = Spicetify.LocalStorage?.get?.("release-list:settings");
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.groupColors) {
-        return {
-          album: parsed.groupColors.album || DEFAULT_GROUP_COLORS.album,
-          single: parsed.groupColors.single || DEFAULT_GROUP_COLORS.single,
-        };
-      }
+      if (parsed?.groupColors) return withDefaultColors(parsed.groupColors);
     }
-    if (local?.groupColors) {
-      return {
-        album: local.groupColors.album || DEFAULT_GROUP_COLORS.album,
-        single: local.groupColors.single || DEFAULT_GROUP_COLORS.single,
-      };
-    }
+    if (local?.groupColors) return withDefaultColors(local.groupColors);
   } catch {}
   return DEFAULT_GROUP_COLORS;
 }
@@ -414,25 +420,12 @@ const badgeCache = new Map();
 
 function getTypeBadge(type, groupColors = null) {
   const colors = groupColors || getGroupColors();
-  const cacheKey = `${type}_${colors.album}_${colors.single}`;
+  const t = TYPE_LABELS[type] ? type : "album";
+  const bg = colors[t] || DEFAULT_GROUP_COLORS[t];
+  const cacheKey = `${t}_${bg}`;
   if (badgeCache.has(cacheKey)) return badgeCache.get(cacheKey);
 
-  let badge;
-  if (type === "single") {
-    const bg = colors.single || DEFAULT_GROUP_COLORS.single;
-    badge = {
-      label: "SINGLE / EP",
-      bg,
-      fg: getContrastYIQ(bg),
-    };
-  } else {
-    const bg = colors.album || DEFAULT_GROUP_COLORS.album;
-    badge = {
-      label: "ALBUM",
-      bg,
-      fg: getContrastYIQ(bg),
-    };
-  }
+  const badge = { label: TYPE_LABELS[t], bg, fg: getContrastYIQ(bg) };
   badgeCache.set(cacheKey, badge);
   return badge;
 }
@@ -475,7 +468,7 @@ function extractReleaseDateStr(item) {
 
 
 // ---------------------------------------------------------------------------
-// 2. Release Classification Logic (Albums & Singles/EPs Only)
+// 2. Release Classification Logic (Albums, EPs & Singles Only)
 // ---------------------------------------------------------------------------
 function classifyRelease(item, fallbackGroup = "") {
   const groupHint = String(item.album_group || fallbackGroup || "").toLowerCase();
@@ -512,6 +505,13 @@ function normalizeAlbumTitle(title) {
     .replace(/[^\p{L}\p{N}\s]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Normalized artist keys for a saved album: the joined credit plus each credited artist,
+// so a collaboration counts as saved under any of its artists
+function savedArtistKeys(album) {
+  const names = new Set([album.artist, ...(album.artistNames || [])]);
+  return [...names].map(normalizeAlbumTitle).filter(Boolean);
 }
 
 // Normalize text for resilient search matching (strips accents & diacritics, lowercases)
@@ -616,6 +616,7 @@ async function fetchAllSavedAlbums(onProgress) {
         uri: item.uri,
         name: item.name,
         artist: item.artists?.map((a) => a.name).join(", ") ?? "Unknown Artist",
+        artistNames: item.artists?.map((a) => a.name).filter(Boolean) ?? [],
         artistUri: artistUri,
         imageUrl: item.images?.[0]?.url ?? item.imgUrl ?? "",
         type: classifyRelease(item),
@@ -656,7 +657,7 @@ async function exportSavedAlbums(format = "json") {
       name: a.name,
       artist: a.artist,
       year: a.year || "",
-      type: a.type || "album",
+      type: splitEpType(a.type || "album", loadAlbumMeta().get(a.uri)?.trackCount || 0),
       imageUrl: a.imageUrl || "",
     }));
 
@@ -921,6 +922,107 @@ async function enrichSavedAlbums(albums) {
 }
 
 // ---------------------------------------------------------------------------
+// 4c. Discover Pool (followed-artist releases that are not in the library)
+// Reuses the catalog Release List already synced, so it costs no Spotify requests.
+// ---------------------------------------------------------------------------
+const STORAGE_DISCOVER_TYPES = "random-library:discover-types";
+const DEFAULT_DISCOVER_TYPES = ["album", "ep"];
+let discoverCache = null;
+let discoverShuffledCache = null;
+
+async function fetchDiscoverReleases() {
+  const catalog = await readReleaseListCatalog();
+  const groups = new Map();
+  const artistKeys = new Map();
+
+  for (const item of catalog) {
+    if (!item?.uri || !item.title) continue;
+    const artist = item.artist?.name || "";
+    let artistKey = artistKeys.get(artist);
+    if (artistKey === undefined) {
+      artistKey = normalizeAlbumTitle(artist);
+      artistKeys.set(artist, artistKey);
+    }
+    // Same shape as the saved-album name keys; editions of one title share a key
+    const savedKey = `${artistKey}:${normalizeAlbumTitle(item.title) || item.title.toLowerCase().trim()}`;
+
+    const trackCount = item.trackCount || 0;
+    const releaseDate = item.dateStr || "";
+    const release = {
+      uri: item.uri,
+      name: item.title,
+      artist,
+      artistUri: item.artist?.uri || "",
+      imageUrl: item.imageURL || "",
+      type: splitEpType(item.type === "album" || item.type === "ep" ? item.type : "single", trackCount),
+      year: releaseDate.slice(0, 4),
+      releaseDate,
+      trackCount,
+      savedKey,
+    };
+
+    const group = groups.get(savedKey);
+    if (group) group.push(release);
+    else groups.set(savedKey, [release]);
+  }
+
+  const releases = [];
+  for (const editions of groups.values()) {
+    if (editions.length === 1) {
+      releases.push(editions[0]);
+      continue;
+    }
+    // Same preference as the artist view: deluxe, then remaster, then newest
+    const ranked = editions
+      .map((release) => ({ release, info: getEditionInfo(release.name) }))
+      .sort((a, b) => {
+        if (a.info.isDeluxe !== b.info.isDeluxe) return a.info.isDeluxe ? -1 : 1;
+        if (a.info.isRemaster !== b.info.isRemaster) return a.info.isRemaster ? -1 : 1;
+        return b.release.releaseDate.localeCompare(a.release.releaseDate);
+      });
+    releases.push({
+      ...ranked[0].release,
+      type: editions.some((e) => e.type === "album") ? "album" : ranked[0].release.type,
+      editions: ranked.map(({ release }) => ({ uri: release.uri, name: release.name, isSaved: false })),
+    });
+  }
+
+  return releases;
+}
+
+// Shuffle that gives every artist equal weight: each artist's Nth album, EP and single
+// land in round N, so a large discography does not crowd the top of the grid
+function shuffleByArtist(releases) {
+  const nextRound = new Map();
+  const keyed = fisherYatesShuffle(releases).map((release) => {
+    const key = `${release.artistUri || release.artist}|${release.type}`;
+    const round = nextRound.get(key) || 0;
+    nextRound.set(key, round + 1);
+    return { release, round };
+  });
+  // Stable sort keeps the shuffled order inside each round
+  keyed.sort((a, b) => a.round - b.round);
+  return keyed.map((k) => k.release);
+}
+
+// Sorts in place; "shuffle" keeps the incoming order
+function sortAlbumList(list, sortBy) {
+  if (sortBy === "date-desc" || sortBy === "date-asc") {
+    // Undated albums go last in both directions
+    const dir = sortBy === "date-desc" ? -1 : 1;
+    list.sort((a, b) => {
+      if (!a.releaseDate) return b.releaseDate ? 1 : 0;
+      if (!b.releaseDate) return -1;
+      return dir * a.releaseDate.localeCompare(b.releaseDate);
+    });
+  } else if (sortBy === "name-asc") list.sort((a, b) => a.name.localeCompare(b.name));
+  else if (sortBy === "name-desc") list.sort((a, b) => b.name.localeCompare(a.name));
+  else if (sortBy === "artist-asc") list.sort((a, b) => a.artist.localeCompare(b.artist));
+  else if (sortBy === "artist-desc") list.sort((a, b) => b.artist.localeCompare(a.artist));
+  return list;
+}
+
+// ---------------------------------------------------------------------------
 // 5. On-Demand Artist Discography Fetcher (Web API + Search + Cosmos + GraphQL)
 // ---------------------------------------------------------------------------
 const artistDiscographyCache = new Map();
@@ -1056,7 +1158,9 @@ async function fetchArtistReleases(artistUri, artistName = "") {
             const rawType = item.type || item.albumType || group.type || group.albumType || "album";
             const t = String(rawType).toUpperCase();
             if (t.includes("COMPILATION") || t.includes("APPEARS_ON")) continue;
-            const normType = (t.includes("SINGLE") || t.includes("EP")) ? "single" : "album";
+            const trackCount = item.tracks?.totalCount || 0;
+            const normType =
+              t === "EP" ? "ep" : t.includes("SINGLE") || t.includes("EP") ? splitEpType("single", trackCount) : "album";
 
             const artistsList = item.artists?.items
               ? item.artists.items.map((a) => a.profile?.name || a.name).filter(Boolean).join(", ")
@@ -1081,7 +1185,7 @@ async function fetchArtistReleases(artistUri, artistName = "") {
               imageUrl: coverUrl,
               type: normType,
               releaseDate: dateStr,
-              trackCount: item.tracks?.totalCount || 0,
+              trackCount,
             });
           }
         }
@@ -1126,7 +1230,9 @@ async function fetchArtistReleases(artistUri, artistName = "") {
             const rawType = item.type || item.albumType || group.type || group.albumType || "album";
             const t = String(rawType).toUpperCase();
             if (t.includes("COMPILATION") || t.includes("APPEARS_ON")) continue;
-            const normType = (t.includes("SINGLE") || t.includes("EP")) ? "single" : "album";
+            const trackCount = item.tracks?.totalCount || 0;
+            const normType =
+              t === "EP" ? "ep" : t.includes("SINGLE") || t.includes("EP") ? splitEpType("single", trackCount) : "album";
 
             const artistsList = item.artists?.items
               ? item.artists.items.map((a) => a.profile?.name || a.name).filter(Boolean).join(", ")
@@ -1151,7 +1257,7 @@ async function fetchArtistReleases(artistUri, artistName = "") {
               imageUrl: coverUrl,
               type: normType,
               releaseDate: dateStr,
-              trackCount: item.tracks?.totalCount || 0,
+              trackCount,
             });
           }
         }
@@ -1205,7 +1311,7 @@ async function fetchArtistReleases(artistUri, artistName = "") {
                   name: item.name,
                   artist: item.artists?.map((a) => a.name).join(", ") || artistName,
                   imageUrl: item.images?.[0]?.url || item.images?.[1]?.url || "",
-                  type: classifyRelease(item, group),
+                  type: splitEpType(classifyRelease(item, group), item.total_tracks || 0),
                   releaseDate: item.release_date || item.releaseDate || "",
                   trackCount: item.total_tracks || 0,
                 });
@@ -1569,6 +1675,8 @@ const STYLES = {
     display: "inline-flex",
     alignItems: "center",
     gap: "4px",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
     cursor: "pointer",
     transition: "transform 0.15s ease, background 0.15s ease",
   }),
@@ -1763,33 +1871,56 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
         },
         album.name
       ),
-      // Artist
+      // Artist, with the Edition Switcher at the end of the line
       React.createElement(
         "div",
-        {
-          className: "rl-card-artist",
-          onClick: (e) => {
-            e.stopPropagation();
-            let artistUri = album.artistUri;
-            if (!artistUri && followedArtistCache && followedArtistCache.length > 0) {
-              const match = followedArtistCache.find(
-                (a) => a.name && a.name.toLowerCase() === (album.artist || "").toLowerCase()
-              );
-              if (match) artistUri = match.uri;
-            }
+        { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 } },
+        React.createElement(
+          "div",
+          {
+            className: "rl-card-artist",
+            onClick: (e) => {
+              e.stopPropagation();
+              let artistUri = album.artistUri;
+              if (!artistUri && followedArtistCache && followedArtistCache.length > 0) {
+                const match = followedArtistCache.find(
+                  (a) => a.name && a.name.toLowerCase() === (album.artist || "").toLowerCase()
+                );
+                if (match) artistUri = match.uri;
+              }
 
-            if (artistUri) {
-              const id = artistUri.split(":").pop();
-              Spicetify.Platform.History.push("/artist/" + id);
-            } else if (album.artist) {
-              Spicetify.Platform.History.push("/search/" + encodeURIComponent(album.artist));
-            }
+              if (artistUri) {
+                const id = artistUri.split(":").pop();
+                Spicetify.Platform.History.push("/artist/" + id);
+              } else if (album.artist) {
+                Spicetify.Platform.History.push("/search/" + encodeURIComponent(album.artist));
+              }
+            },
+            title: `Go to ${album.artist || "Artist"}'s Spotify page`,
           },
-          title: `Go to ${album.artist || "Artist"}'s Spotify page`,
-        },
-        album.artist
+          album.artist
+        ),
+        hasEditions &&
+          React.createElement(
+            "button",
+            {
+              className: "rl-edition-badge",
+              style: STYLES.editionBadge(album.hasUpgradeAvailable),
+              onClick: (e) => {
+                e.stopPropagation();
+                setShowEditions((prev) => !prev);
+              },
+              title: `${album.editions.length} editions – click to view and switch`,
+            },
+            React.createElement(
+              "svg",
+              { width: "10", height: "10", viewBox: "0 0 24 24", fill: "currentColor" },
+              React.createElement("path", { d: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" })
+            ),
+            album.hasUpgradeAvailable ? "Deluxe" : `${album.editions.length} Eds ▾`
+          )
       ),
-      // Bottom Row: Type badge + Editions button (left) and Year (right)
+      // Bottom Row: Type badge + track count (left) and release date (right)
       React.createElement(
         "div",
         {
@@ -1802,7 +1933,7 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
         },
         React.createElement(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 6 } },
+          { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } },
           // Type Badge with exact Release List colors and typography
           React.createElement(
             "span",
@@ -1815,6 +1946,8 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
                 backgroundColor: typeBadge.bg,
                 color: typeBadge.fg,
                 letterSpacing: "0.5px",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
               },
             },
             typeBadge.label
@@ -1826,29 +1959,13 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
                 style: {
                   fontSize: 11,
                   color: "rgba(255, 255, 255, 0.5)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  minWidth: 0,
                 },
               },
               `${trackCount} tracks`
-            ),
-          // Edition Switcher Button
-          hasEditions &&
-            React.createElement(
-              "button",
-              {
-                className: "rl-edition-badge",
-                style: STYLES.editionBadge(album.hasUpgradeAvailable),
-                onClick: (e) => {
-                  e.stopPropagation();
-                  setShowEditions((prev) => !prev);
-                },
-                title: "Click to view and switch editions",
-              },
-              React.createElement(
-                "svg",
-                { width: "10", height: "10", viewBox: "0 0 24 24", fill: "currentColor" },
-                React.createElement("path", { d: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" })
-              ),
-              album.hasUpgradeAvailable ? "Deluxe" : `${album.editions.length} Eds ▾`
             )
         ),
         React.createElement(
@@ -1857,6 +1974,9 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
             style: {
               fontSize: 12,
               color: "rgba(255, 255, 255, 0.5)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              marginLeft: 6,
             },
           },
           album.releaseDate || album.year || ""
@@ -2003,7 +2123,8 @@ function FilterPills({ activeFilter, onFilterChange, typeCounts }) {
     { key: "all", label: "All" },
     { key: "saved", label: "In Library", iconCheck: true },
     { key: "album", label: "Albums" },
-    { key: "single", label: "Singles & EPs" },
+    { key: "ep", label: "EPs" },
+    { key: "single", label: "Singles" },
     { key: "has_editions", label: "Alternative Editions", icon: true },
   ];
 
@@ -2181,7 +2302,7 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
           React.createElement(
             "p",
             { style: { margin: 0, fontSize: 12, color: "rgba(255,255,255,0.6)" } },
-            "Customize the badge pill colors for albums and singles/EPs across cards."
+            "Customize the badge pill colors for albums, EPs and singles across cards."
           ),
           // Sync toggle
           React.createElement(
@@ -2211,108 +2332,62 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
           React.createElement(
             "div",
             { style: { display: "flex", flexDirection: "column", gap: 10, opacity: syncWithReleaseList ? 0.6 : 1 } },
-            // Album color
-            React.createElement(
-              "div",
-              {
-                style: {
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 14px",
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 6,
-                },
-              },
+            [
+              { key: "album", label: "Albums" },
+              { key: "ep", label: "EPs" },
+              { key: "single", label: "Singles" },
+            ].map(({ key, label }) =>
               React.createElement(
                 "div",
-                { style: { display: "flex", alignItems: "center", gap: 10 } },
-                React.createElement(
-                  "span",
-                  {
-                    style: {
-                      fontSize: 10,
-                      fontWeight: 800,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      backgroundColor: localColors.album,
-                      color: getContrastYIQ(localColors.album),
-                      letterSpacing: "0.5px",
-                    },
+                {
+                  key,
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    background: "rgba(255,255,255,0.04)",
+                    borderRadius: 6,
                   },
-                  "ALBUM"
-                ),
-                React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, "Albums")
-              ),
-              React.createElement(
-                "div",
-                { style: { display: "flex", alignItems: "center", gap: 8 } },
-                React.createElement("input", {
-                  type: "color",
-                  className: "rl-color-picker",
-                  value: localColors.album,
-                  disabled: syncWithReleaseList,
-                  onChange: (e) => handleColorChange("album", e.target.value),
-                }),
-                React.createElement("input", {
-                  type: "text",
-                  className: "rl-color-hex",
-                  value: localColors.album,
-                  disabled: syncWithReleaseList,
-                  onChange: (e) => handleColorChange("album", e.target.value),
-                })
-              )
-            ),
-            // Single / EP color
-            React.createElement(
-              "div",
-              {
-                style: {
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 14px",
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 6,
                 },
-              },
-              React.createElement(
-                "div",
-                { style: { display: "flex", alignItems: "center", gap: 10 } },
                 React.createElement(
-                  "span",
-                  {
-                    style: {
-                      fontSize: 10,
-                      fontWeight: 800,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      backgroundColor: localColors.single,
-                      color: getContrastYIQ(localColors.single),
-                      letterSpacing: "0.5px",
+                  "div",
+                  { style: { display: "flex", alignItems: "center", gap: 10 } },
+                  React.createElement(
+                    "span",
+                    {
+                      style: {
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        backgroundColor: localColors[key],
+                        color: getContrastYIQ(localColors[key]),
+                        letterSpacing: "0.5px",
+                      },
                     },
-                  },
-                  "SINGLE / EP"
+                    TYPE_LABELS[key]
+                  ),
+                  React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, label)
                 ),
-                React.createElement("span", { style: { fontSize: 13, fontWeight: 600 } }, "Singles & EPs")
-              ),
-              React.createElement(
-                "div",
-                { style: { display: "flex", alignItems: "center", gap: 8 } },
-                React.createElement("input", {
-                  type: "color",
-                  className: "rl-color-picker",
-                  value: localColors.single,
-                  disabled: syncWithReleaseList,
-                  onChange: (e) => handleColorChange("single", e.target.value),
-                }),
-                React.createElement("input", {
-                  type: "text",
-                  className: "rl-color-hex",
-                  value: localColors.single,
-                  disabled: syncWithReleaseList,
-                  onChange: (e) => handleColorChange("single", e.target.value),
-                })
+                React.createElement(
+                  "div",
+                  { style: { display: "flex", alignItems: "center", gap: 8 } },
+                  React.createElement("input", {
+                    type: "color",
+                    className: "rl-color-picker",
+                    value: localColors[key],
+                    disabled: syncWithReleaseList,
+                    onChange: (e) => handleColorChange(key, e.target.value),
+                  }),
+                  React.createElement("input", {
+                    type: "text",
+                    className: "rl-color-hex",
+                    value: localColors[key],
+                    disabled: syncWithReleaseList,
+                    onChange: (e) => handleColorChange(key, e.target.value),
+                  })
+                )
               )
             )
           )
@@ -2500,6 +2575,18 @@ function RandomLibraryApp() {
   const [artistReleases, setArtistReleases] = useState([]);
   const [artistReleasesLoading, setArtistReleasesLoading] = useState(false);
 
+  const [discoverReleases, setDiscoverReleases] = useState(discoverCache || []);
+  const [discoverShuffled, setDiscoverShuffled] = useState(discoverShuffledCache || []);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverTypes, setDiscoverTypes] = useState(() => {
+    try {
+      const parsed = JSON.parse(Spicetify.LocalStorage.get(STORAGE_DISCOVER_TYPES) || "null");
+      const valid = Array.isArray(parsed) ? parsed.filter((t) => RELEASE_TYPES.includes(t)) : [];
+      if (valid.length > 0) return valid;
+    } catch {}
+    return DEFAULT_DISCOVER_TYPES;
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -2520,7 +2607,7 @@ function RandomLibraryApp() {
   // Reset visibleCount whenever user navigates or filters change
   useEffect(() => {
     setVisibleCount(INITIAL_BATCH_SIZE);
-  }, [mode, selectedArtist, sortBy, debouncedMainQuery, debouncedArtistQuery, releaseFilter]);
+  }, [mode, selectedArtist, sortBy, debouncedMainQuery, debouncedArtistQuery, releaseFilter, discoverTypes]);
 
   useEffect(() => {
     cachedMainSearchQuery = mainSearchQuery;
@@ -2547,6 +2634,35 @@ function RandomLibraryApp() {
     cachedArtistSearchQuery = "";
     Spicetify.LocalStorage.set(STORAGE_ACTIVE_MODE, newMode);
   };
+
+  // Discover pool: read Release List's catalog (an empty result is retried on the next visit)
+  const loadDiscover = useCallback(async (force = false) => {
+    if (!force && discoverCache?.length) return;
+    setDiscoverLoading(true);
+    try {
+      const data = await fetchDiscoverReleases();
+      discoverCache = data;
+      discoverShuffledCache = shuffleByArtist(data);
+      setDiscoverReleases(data);
+      setDiscoverShuffled(discoverShuffledCache);
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "discover") loadDiscover();
+  }, [mode, loadDiscover]);
+
+  const toggleDiscoverType = useCallback((type) => {
+    setDiscoverTypes((prev) => {
+      const active = prev.includes(type);
+      if (active && prev.length === 1) return prev;
+      const next = active ? prev.filter((t) => t !== type) : [...prev, type];
+      Spicetify.LocalStorage.set(STORAGE_DISCOVER_TYPES, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   // Manual Refresh / Sync Button Handler
   const handleRefresh = useCallback(async () => {
@@ -2598,6 +2714,10 @@ function RandomLibraryApp() {
       setFollowedArtists(artists);
       setFollowedArtistsShuffled(shufArtists);
 
+      discoverCache = null;
+      discoverShuffledCache = null;
+      if (mode === "discover") await loadDiscover(true);
+
       if (selectedArtist) {
         setArtistReleasesLoading(true);
         try {
@@ -2614,7 +2734,7 @@ function RandomLibraryApp() {
     } finally {
       setTimeout(() => setRefreshing(false), 350);
     }
-  }, [refreshing, selectedArtist]);
+  }, [refreshing, selectedArtist, mode, loadDiscover]);
 
   // Open Artist Discography View (tracks in-app history stack for instant back/forward navigation)
   const handleOpenArtist = useCallback(async (artist, recordHistory = true, preserveQuery = false) => {
@@ -2773,12 +2893,16 @@ function RandomLibraryApp() {
       const fresh = fisherYatesShuffle(savedAlbums);
       savedShuffledCache = fresh;
       setSavedShuffled(fresh);
+    } else if (mode === "discover") {
+      const fresh = shuffleByArtist(discoverReleases);
+      discoverShuffledCache = fresh;
+      setDiscoverShuffled(fresh);
     } else {
       const fresh = fisherYatesShuffle(followedArtists);
       followedArtistShuffledCache = fresh;
       setFollowedArtistsShuffled(fresh);
     }
-  }, [mode, savedAlbums, followedArtists]);
+  }, [mode, savedAlbums, followedArtists, discoverReleases]);
 
   // Saved album release dates & track counts (filled in the background)
   useEffect(() => {
@@ -2802,22 +2926,11 @@ function RandomLibraryApp() {
     const meta = loadAlbumMeta();
     const withMeta = (a) => {
       const m = meta.get(a.uri);
-      return m ? { ...a, releaseDate: m.releaseDate || a.releaseDate, trackCount: m.trackCount || a.trackCount } : a;
+      if (!m) return a;
+      const trackCount = m.trackCount || a.trackCount;
+      return { ...a, releaseDate: m.releaseDate || a.releaseDate, trackCount, type: splitEpType(a.type, trackCount) };
     };
-    let list = (sortBy === "shuffle" ? savedShuffled : savedAlbums).map(withMeta);
-
-    if (sortBy === "date-desc" || sortBy === "date-asc") {
-      // Undated albums go last in both directions
-      const dir = sortBy === "date-desc" ? -1 : 1;
-      list.sort((a, b) => {
-        if (!a.releaseDate) return b.releaseDate ? 1 : 0;
-        if (!b.releaseDate) return -1;
-        return dir * a.releaseDate.localeCompare(b.releaseDate);
-      });
-    } else if (sortBy === "name-asc") list.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sortBy === "name-desc") list.sort((a, b) => b.name.localeCompare(a.name));
-    else if (sortBy === "artist-asc") list.sort((a, b) => a.artist.localeCompare(b.artist));
-    else if (sortBy === "artist-desc") list.sort((a, b) => b.artist.localeCompare(a.artist));
+    let list = sortAlbumList((sortBy === "shuffle" ? savedShuffled : savedAlbums).map(withMeta), sortBy);
 
     if (debouncedMainQuery.trim()) {
       const matcher = createSearchMatcher(debouncedMainQuery);
@@ -2851,22 +2964,46 @@ function RandomLibraryApp() {
     const set = new Set();
     for (const a of savedAlbums) {
       const norm = normalizeAlbumTitle(a.name);
-      const normArtist = normalizeAlbumTitle(a.artist);
-      if (norm && normArtist) {
-        set.add(`${normArtist}:${norm}`);
-      }
+      if (!norm) continue;
+      for (const normArtist of savedArtistKeys(a)) set.add(`${normArtist}:${norm}`);
     }
     return set;
   }, [savedAlbums]);
+
+  // Discover: catalog releases with no edition saved in the library
+  const unsavedDiscover = useMemo(() => {
+    const source = sortBy === "shuffle" ? discoverShuffled : discoverReleases;
+    return source.filter(
+      (r) =>
+        !savedNameSet.has(r.savedKey) &&
+        !(r.editions ? r.editions.some((e) => savedUriSet.has(e.uri)) : savedUriSet.has(r.uri))
+    );
+  }, [discoverShuffled, discoverReleases, sortBy, savedUriSet, savedNameSet]);
+
+  const discoverTypeCounts = useMemo(() => {
+    const counts = {};
+    for (const r of unsavedDiscover) counts[r.type] = (counts[r.type] || 0) + 1;
+    return counts;
+  }, [unsavedDiscover]);
+
+  const displayedDiscover = useMemo(() => {
+    let list = sortAlbumList(unsavedDiscover.filter((r) => discoverTypes.includes(r.type)), sortBy);
+
+    if (debouncedMainQuery.trim()) {
+      const matcher = createSearchMatcher(debouncedMainQuery);
+      list = list.filter((a) => matcher(a.name) || matcher(a.artist));
+    }
+
+    return list;
+  }, [unsavedDiscover, discoverTypes, sortBy, debouncedMainQuery]);
 
   // Exact unmodified saved album names scoped to artist
   const savedExactNameSet = useMemo(() => {
     const set = new Set();
     for (const a of savedAlbums) {
-      const normArtist = normalizeAlbumTitle(a.artist);
-      if (a.name && normArtist) {
-        set.add(`${normArtist}:${a.name.toLowerCase().trim()}`);
-      }
+      if (!a.name) continue;
+      const exact = a.name.toLowerCase().trim();
+      for (const normArtist of savedArtistKeys(a)) set.add(`${normArtist}:${exact}`);
     }
     return set;
   }, [savedAlbums]);
@@ -3021,16 +3158,24 @@ function RandomLibraryApp() {
     return displayedArtistReleases.slice(0, visibleCount);
   }, [displayedArtistReleases, visibleCount]);
 
+  const visibleDiscover = useMemo(() => {
+    return displayedDiscover.slice(0, visibleCount);
+  }, [displayedDiscover, visibleCount]);
+
   const currentTotalCount = selectedArtist
     ? displayedArtistReleases.length
     : mode === "albums"
     ? displayedSavedAlbums.length
+    : mode === "discover"
+    ? displayedDiscover.length
     : displayedArtists.length;
 
   const currentVisibleCount = selectedArtist
     ? visibleArtistReleases.length
     : mode === "albums"
     ? visibleSavedAlbums.length
+    : mode === "discover"
+    ? visibleDiscover.length
     : visibleArtists.length;
 
   // IntersectionObserver for seamless infinite scrolling near bottom
@@ -3076,7 +3221,7 @@ function RandomLibraryApp() {
         "div",
         { style: { fontSize: "13px", color: "var(--spice-subtext, rgba(255, 255, 255, 0.6))", fontWeight: 500 } },
         `Showing ${currentVisibleCount} of ${currentTotalCount} ${
-          selectedArtist ? "releases" : mode === "albums" ? "saved albums" : "artists"
+          selectedArtist ? "releases" : mode === "albums" ? "saved albums" : mode === "discover" ? "unsaved releases" : "artists"
         }`
       ),
 
@@ -3135,6 +3280,23 @@ function RandomLibraryApp() {
     handleFilterChange("all");
   }
 
+  // Opens a random release from the current Discover selection: random artist first, then one of their releases
+  function handlePickRandomDiscover() {
+    if (displayedDiscover.length === 0) return;
+    const byArtist = new Map();
+    for (const r of displayedDiscover) {
+      const key = r.artistUri || r.artist;
+      const list = byArtist.get(key);
+      if (list) list.push(r);
+      else byArtist.set(key, [r]);
+    }
+    const artists = [...byArtist.values()];
+    const releases = artists[Math.floor(Math.random() * artists.length)];
+    const pick = releases[Math.floor(Math.random() * releases.length)];
+    const albumId = getSpotifyId(pick.uri);
+    if (albumId) Spicetify.Platform.History.push("/album/" + albumId);
+  }
+
   function handleClearMainFilters() {
     setMainSearchQuery("");
     cachedMainSearchQuery = "";
@@ -3186,49 +3348,61 @@ function RandomLibraryApp() {
     React.createElement(
       "div",
       { style: STYLES.header },
-      // Left: Title, Subtitle, and Standardized Mode Toggles (Anchored)
+      // Left: Title and Mode Toggles on one row, Subtitle below (its length never moves the toggles)
       React.createElement(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" } },
+        { style: STYLES.titleGroup },
         React.createElement(
           "div",
-          { style: STYLES.titleGroup },
+          { style: { display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" } },
           React.createElement("div", { style: STYLES.title }, "Random Library"),
+          // Standardized Mode switch pills
           React.createElement(
             "div",
-            { style: STYLES.subtitle },
-            selectedArtist
-              ? `${displayedArtistReleases.length} releases for ${selectedArtist.name}`
-              : mode === "albums"
-              ? `${displayedSavedAlbums.length} saved albums ${sortBy === "shuffle" ? "shuffled" : "listed"}` +
-                (albumMetaProgress.known < albumMetaProgress.total
-                  ? ` \u00b7 loading release dates ${albumMetaProgress.known}/${albumMetaProgress.total}`
-                  : "")
-              : `${displayedArtists.length} followed artists ${sortBy === "shuffle" ? "shuffled" : "listed"}`
+            { style: STYLES.modeToggleGroup },
+            React.createElement(
+              "button",
+              {
+                className: `rl-mode-btn ${mode === "albums" ? "active" : ""}`,
+                style: STYLES.modeBtn(mode === "albums"),
+                onClick: () => handleModeChange("albums"),
+              },
+              "Albums"
+            ),
+            React.createElement(
+              "button",
+              {
+                className: `rl-mode-btn ${mode === "artists" ? "active" : ""}`,
+                style: STYLES.modeBtn(mode === "artists"),
+                onClick: () => handleModeChange("artists"),
+              },
+              "Artists"
+            ),
+            React.createElement(
+              "button",
+              {
+                className: `rl-mode-btn ${mode === "discover" ? "active" : ""}`,
+                style: STYLES.modeBtn(mode === "discover"),
+                onClick: () => handleModeChange("discover"),
+                title: "Releases from followed artists that are not in your library",
+              },
+              "Discover"
+            )
           )
         ),
-        // Standardized Mode switch pills
         React.createElement(
           "div",
-          { style: STYLES.modeToggleGroup },
-          React.createElement(
-            "button",
-            {
-              className: `rl-mode-btn ${mode === "albums" ? "active" : ""}`,
-              style: STYLES.modeBtn(mode === "albums"),
-              onClick: () => handleModeChange("albums"),
-            },
-            "Albums"
-          ),
-          React.createElement(
-            "button",
-            {
-              className: `rl-mode-btn ${mode === "artists" ? "active" : ""}`,
-              style: STYLES.modeBtn(mode === "artists"),
-              onClick: () => handleModeChange("artists"),
-            },
-            "Artists"
-          )
+          { style: STYLES.subtitle },
+          selectedArtist
+            ? `${displayedArtistReleases.length} releases for ${selectedArtist.name}`
+            : mode === "albums"
+            ? `${displayedSavedAlbums.length} saved albums ${sortBy === "shuffle" ? "shuffled" : "listed"}` +
+              (albumMetaProgress.known < albumMetaProgress.total
+                ? ` \u00b7 loading release dates ${albumMetaProgress.known}/${albumMetaProgress.total}`
+                : "")
+            : mode === "discover"
+            ? `${displayedDiscover.length} releases not in your library ${sortBy === "shuffle" ? "shuffled" : "listed"}`
+            : `${displayedArtists.length} followed artists ${sortBy === "shuffle" ? "shuffled" : "listed"}`
         )
       ),
 
@@ -3236,12 +3410,12 @@ function RandomLibraryApp() {
       React.createElement(
         "div",
         { style: STYLES.headerControls },
-        // Random Album Button (in Albums mode)
-        mode === "albums" && React.createElement(
+        // Random Album Button (in Albums and Discover modes)
+        (mode === "albums" || mode === "discover") && React.createElement(
           "button",
           {
             style: STYLES.actionBtn,
-            onClick: handlePickRandomAlbum,
+            onClick: mode === "discover" ? handlePickRandomDiscover : handlePickRandomAlbum,
           },
           React.createElement(
             "svg",
@@ -3760,6 +3934,130 @@ function RandomLibraryApp() {
         "div",
         { style: STYLES.loadingContainer },
         "No saved albums match your search."
+      )
+    ),
+
+    // -----------------------------------------------------------------------
+    // VIEW 4: Discover Grid (followed-artist releases not in the library)
+    // -----------------------------------------------------------------------
+    !selectedArtist && mode === "discover" && React.createElement(
+      "div",
+      null,
+      React.createElement(
+        "div",
+        { style: STYLES.filterSection },
+        // Release type toggles
+        React.createElement(
+          "div",
+          { style: STYLES.filterPillRow },
+          [
+            { key: "album", label: "Albums" },
+            { key: "ep", label: "EPs" },
+            { key: "single", label: "Singles" },
+          ].map((f) => {
+            const active = discoverTypes.includes(f.key);
+            const count = discoverTypeCounts[f.key] || 0;
+            return React.createElement(
+              "button",
+              {
+                key: f.key,
+                className: `rl-filter-pill ${active ? "active" : ""}`,
+                style: STYLES.pill(active),
+                onClick: () => toggleDiscoverType(f.key),
+                title: `Toggle ${f.label} (${count})`,
+              },
+              f.label,
+              React.createElement("span", { style: STYLES.pillCount(active) }, count)
+            );
+          })
+        ),
+        React.createElement(
+          "div",
+          { style: STYLES.controlsRow },
+          React.createElement(
+            "div",
+            { style: { display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", flex: "1 1 auto" } },
+            React.createElement(
+              "div",
+              { style: STYLES.searchWrapper },
+              React.createElement(
+                "svg",
+                { style: STYLES.searchIcon, width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", {
+                  d: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+                })
+              ),
+              React.createElement("input", {
+                type: "text",
+                placeholder: "Search unsaved releases or artists\u2026",
+                value: mainSearchQuery,
+                onChange: (e) => setMainSearchQuery(e.target.value),
+                style: STYLES.searchInput,
+              })
+            ),
+
+            React.createElement(
+              "div",
+              { style: STYLES.selectWrapper },
+              React.createElement(
+                "select",
+                {
+                  value: sortBy,
+                  onChange: (e) => {
+                    setSortBy(e.target.value);
+                    cachedSortBy = e.target.value;
+                  },
+                  style: STYLES.select,
+                },
+                React.createElement("option", { value: "shuffle" }, "Shuffled"),
+                React.createElement("option", { value: "name-asc" }, "Album A\u2013Z"),
+                React.createElement("option", { value: "name-desc" }, "Album Z\u2013A"),
+                React.createElement("option", { value: "artist-asc" }, "Artist A\u2013Z"),
+                React.createElement("option", { value: "artist-desc" }, "Artist Z\u2013A"),
+                React.createElement("option", { value: "date-desc" }, "Newest first"),
+                React.createElement("option", { value: "date-asc" }, "Oldest first")
+              ),
+              React.createElement(
+                "svg",
+                { style: STYLES.selectChevron, width: "12", height: "12", viewBox: "0 0 24 24", fill: "currentColor" },
+                React.createElement("path", { d: "M7 10l5 5 5-5z" })
+              )
+            ),
+
+            hasMainFilters && React.createElement(
+              "button",
+              { style: STYLES.clearBtn, onClick: handleClearMainFilters },
+              "Clear filters"
+            )
+          ),
+          renderSettingsBtn()
+        )
+      ),
+
+      // Discover Grid
+      displayedDiscover.length > 0 && React.createElement(
+        "div",
+        { style: STYLES.grid, className: "rl-grid main-gridContainer-gridContainer" },
+        visibleDiscover.map((album) =>
+          React.createElement(AlbumCard, {
+            key: album.uri,
+            album,
+            isSaved: false,
+            groupColors,
+          })
+        )
+      ),
+
+      renderPaginationFooter(),
+
+      displayedDiscover.length === 0 && React.createElement(
+        "div",
+        { style: STYLES.loadingContainer },
+        discoverLoading
+          ? "Loading releases\u2026"
+          : discoverReleases.length === 0
+          ? "No release catalog found. Open Release List, let it sync, then press Refresh here."
+          : "No unsaved releases match your filters."
       )
     ),
 

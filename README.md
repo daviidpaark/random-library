@@ -6,25 +6,26 @@ Companion to [Release List](https://github.com/daviidpaark/release-list); both a
 
 ## Features
 
-- **Albums and Artists Modes**
+- **Albums, Artists, and Discover Modes**
   - **`Albums`**: Your saved albums, loaded from the local library.
   - **`Artists`**: A shuffled grid of the artists you follow.
+  - **`Discover`**: A shuffled grid of releases from followed artists that are not in your library. Toggle **Albums**, **EPs**, and **Singles**. The shuffle gives every artist equal weight, editions of one title are grouped under the **`Eds ▾`** dropdown, and titles you already saved in any edition are left out. Requires [Release List](https://github.com/daviidpaark/release-list), and covers the releases inside its sync window.
 - **Random Picks**
-  - **`Random Album`** opens a random album from your saved collection.
+  - **`Random Album`** opens a random album from your saved collection. In **Discover** it picks a random artist first, then one of their unsaved releases.
   - **`Random Artist`** opens the full discography of a random followed artist.
   - Step back and forward through past random artists with **`◀ Previous`** / **`Next ▶`** and a step counter (e.g. `3 of 5`).
   - Selected release filters persist across **Random Artist** rolls, so you can keep discovering within one category.
 - **Artist Discography**
   - Click any followed artist to open their discography inside the app.
-  - Filter by `All`, `✓ In Library`, `Albums`, `Singles & EPs`, or `Alternative Editions`.
+  - Filter by `All`, `✓ In Library`, `Albums`, `EPs`, `Singles`, or `Alternative Editions`.
 - **Edition Deduplication**
   - Groups standard, deluxe, expanded, anniversary, and remastered versions of the same album.
   - Shows your saved version when present; otherwise the most complete edition.
-  - Switch between versions with the **`Edition ▾`** dropdown on album cards.
+  - Switch between versions with the **`Eds ▾`** dropdown next to the artist name.
 - **Cards and Artwork**
   - Hover to reveal a green play button that starts playback immediately.
   - `✓` badge on covers and edition dropdown items that are in your library.
-  - Release type badge (`ALBUM` or `SINGLE / EP`) below each cover.
+  - Release type badge (`ALBUM`, `EP`, or `SINGLE`) below each cover. Spotify groups EPs with singles, so a single with 4 or more tracks is shown as an EP.
   - The grid scales from ultra-wide displays down to compact split-screen windows.
 - **Search and Sort**
   - Debounced search by album title or artist name.
@@ -36,7 +37,7 @@ Companion to [Release List](https://github.com/daviidpaark/release-list); both a
 ## How It Works
 
 - Saved album release dates and track counts load once in the background and are cached locally.
-- If [Release List](https://github.com/daviidpaark/release-list) is installed, Random Library reuses its cached release data (read-only) before requesting anything from Spotify.
+- If [Release List](https://github.com/daviidpaark/release-list) is installed, Random Library reuses its cached release data (read-only) before requesting anything from Spotify. The **Discover** mode is built entirely from that cache and sends no requests of its own.
 
 ## Requirements
 
