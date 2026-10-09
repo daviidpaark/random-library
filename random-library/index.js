@@ -2475,12 +2475,12 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
             "div",
             { style: { display: "flex", gap: 8, alignItems: "center" } },
             React.createElement("input", {
-            className: "rl-color-hex",
-            style: { flex: 1, minWidth: 0, width: "auto", fontFamily: "inherit" },
-            type: "url",
-            placeholder: "http://192.168.1.100:8081",
-            defaultValue: getWebSyncUrl(),
-            onChange: (e) => Spicetify.LocalStorage.set(STORAGE_WEB_SYNC_URL, e.target.value.trim()),
+              className: "rl-color-hex",
+              style: { flex: 1, minWidth: 0, width: "auto", fontFamily: "inherit" },
+              type: "url",
+              placeholder: "http://192.168.1.100:8081",
+              defaultValue: getWebSyncUrl(),
+              onChange: (e) => Spicetify.LocalStorage.set(STORAGE_WEB_SYNC_URL, e.target.value.trim()),
             }),
             React.createElement(
               "button",
@@ -2814,7 +2814,8 @@ function RandomLibraryApp() {
       savedShuffledCache = shufAlbums;
       setSavedAlbums(albums);
       setSavedShuffled(shufAlbums);
-      pushLibraryToWeb(albums, artists);
+      // Release dates and track counts for newly saved albums arrive with the metadata lookup
+      enrichSavedAlbums(albums).finally(() => pushLibraryToWeb(albums, artists));
 
       followedArtistCache = artists;
       const shufArtists = fisherYatesShuffle(artists);
