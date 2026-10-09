@@ -1891,7 +1891,7 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
             "svg",
             { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor" },
             React.createElement("path", {
-              d: "M13.985 2.383L5.674 12.14 1.34 7.805l1.414-1.414 2.92 2.92 6.897-8.106 1.414 1.178z",
+              d: "M15.53 2.47a.75.75 0 0 1 0 1.06L4.907 14.153.47 9.716a.75.75 0 0 1 1.06-1.06l3.377 3.376L14.47 2.47a.75.75 0 0 1 1.06 0z",
             })
           )
         ),
@@ -2230,7 +2230,7 @@ function FilterPills({ activeFilter, onFilterChange, typeCounts }) {
             style: { marginRight: "4px" },
           },
           React.createElement("path", {
-            d: "M13.985 2.383L5.674 12.14 1.34 7.805l1.414-1.414 2.92 2.92 6.897-8.106 1.414 1.178z",
+            d: "M15.53 2.47a.75.75 0 0 1 0 1.06L4.907 14.153.47 9.716a.75.75 0 0 1 1.06-1.06l3.377 3.376L14.47 2.47a.75.75 0 0 1 1.06 0z",
           })
         ),
         f.label,

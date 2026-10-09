@@ -82,6 +82,10 @@ iwr -useb "https://raw.githubusercontent.com/daviidpaark/random-library/main/uni
 curl -fsSL "https://raw.githubusercontent.com/daviidpaark/random-library/main/uninstall.sh" | bash
 ```
 
+## Icons
+
+Icons come from [Material Icons](https://github.com/google/material-design-icons) (Apache 2.0), [Feather](https://github.com/feathericons/feather) (MIT), and the glyph set Spotify's desktop client exposes through Spicetify (`Spicetify.SVGIcons`).
+
 ## Disclaimer
 
 This project is an independent, open-source custom app and is not affiliated with, sponsored by, or endorsed by Spotify. Spotify is a registered trademark of Spotify AB.
