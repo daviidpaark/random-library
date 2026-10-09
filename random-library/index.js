@@ -743,6 +743,59 @@ function registerExportMenu() {
 })();
 
 // ---------------------------------------------------------------------------
+// 3c. Web Sync (optional push of the library to a Spicetify Library container)
+// The URL is shared with Release List, which pushes its own catalog.
+// ---------------------------------------------------------------------------
+const STORAGE_WEB_SYNC_URL = "spicetify-library:url";
+
+function getWebSyncUrl() {
+  try {
+    return (Spicetify.LocalStorage.get(STORAGE_WEB_SYNC_URL) || "").trim().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+// notify: report the outcome even on success (manual sync)
+async function pushLibraryToWeb(albums, artists, notify = false) {
+  const baseUrl = getWebSyncUrl();
+  if (!baseUrl || !albums?.length) {
+    if (notify) Spicetify.showNotification?.(baseUrl ? "No saved albums to sync." : "Set a Web Sync address first.", true);
+    return;
+  }
+
+  const meta = loadAlbumMeta();
+  const savedAlbums = albums.map((a) => ({
+    uri: a.uri,
+    name: a.name,
+    artist: a.artist,
+    artistNames: a.artistNames || [],
+    artistUri: a.artistUri || "",
+    imageUrl: a.imageUrl || "",
+    type: a.type || "album",
+    releaseDate: meta.get(a.uri)?.releaseDate || a.releaseDate || "",
+    trackCount: meta.get(a.uri)?.trackCount || 0,
+  }));
+
+  try {
+    const res = await fetch(`${baseUrl}/api/library`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        albums: savedAlbums,
+        artists: (artists || []).map((a) => ({ uri: a.uri, name: a.name, imageUrl: a.imageUrl || "" })),
+        groupColors: getGroupColors(),
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (notify) Spicetify.showNotification?.(`Synced ${savedAlbums.length} albums and ${artists?.length || 0} artists to the web.`);
+  } catch (err) {
+    console.warn("[Random Library] Web sync failed:", err);
+    Spicetify.showNotification?.(`Web sync failed: ${err.message || err}`, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 4. Followed Artists Fetcher (Instant Local Database)
 // ---------------------------------------------------------------------------
 async function fetchAllFollowedArtists(onProgress) {
@@ -2195,6 +2248,7 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
     return s.syncWithReleaseList !== false;
   });
   const [isClearing, setIsClearing] = useState(false);
+  const [isWebSyncing, setIsWebSyncing] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -2230,6 +2284,18 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
         syncWithReleaseList: false,
         groupColors: localColors,
       });
+    }
+  };
+
+  // Pushes the library already loaded in the app; no Spotify requests unless nothing is loaded yet
+  const handleWebSync = async () => {
+    setIsWebSyncing(true);
+    try {
+      if (!savedAlbumCache?.length) savedAlbumCache = await fetchAllSavedAlbums();
+      if (!followedArtistCache?.length) followedArtistCache = await fetchAllFollowedArtists();
+      await pushLibraryToWeb(savedAlbumCache, followedArtistCache, true);
+    } finally {
+      setIsWebSyncing(false);
     }
   };
 
@@ -2392,7 +2458,48 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
             )
           )
         ),
-        // Section 2: Cache Management
+        // Section 2: Web Sync
+        React.createElement(
+          "div",
+          {
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+              paddingTop: 16,
+            },
+          },
+          React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 700, color: "#fff" } }, "Web Sync"),
+          React.createElement(
+            "div",
+            { style: { display: "flex", gap: 8, alignItems: "center" } },
+            React.createElement("input", {
+            className: "rl-color-hex",
+            style: { flex: 1, minWidth: 0, width: "auto", fontFamily: "inherit" },
+            type: "url",
+            placeholder: "http://192.168.1.100:8081",
+            defaultValue: getWebSyncUrl(),
+            onChange: (e) => Spicetify.LocalStorage.set(STORAGE_WEB_SYNC_URL, e.target.value.trim()),
+            }),
+            React.createElement(
+              "button",
+              {
+                className: "rl-action-btn",
+                style: { ...STYLES.actionBtn, fontSize: 12, padding: "6px 14px", flexShrink: 0 },
+                onClick: handleWebSync,
+                disabled: isWebSyncing,
+              },
+              isWebSyncing ? "Syncing..." : "Sync Now"
+            )
+          ),
+          React.createElement(
+            "div",
+            { style: { fontSize: 12, color: "rgba(255,255,255,0.6)" } },
+            "Optional. Address of a Spicetify Library sync endpoint. Refresh and Sync Now push your saved albums and followed artists to it. Shared with Release List."
+          )
+        ),
+        // Section 3: Cache Management
         React.createElement(
           "div",
           {
@@ -2707,6 +2814,7 @@ function RandomLibraryApp() {
       savedShuffledCache = shufAlbums;
       setSavedAlbums(albums);
       setSavedShuffled(shufAlbums);
+      pushLibraryToWeb(albums, artists);
 
       followedArtistCache = artists;
       const shufArtists = fisherYatesShuffle(artists);
