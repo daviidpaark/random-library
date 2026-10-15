@@ -980,6 +980,7 @@ async function enrichSavedAlbums(albums) {
 // ---------------------------------------------------------------------------
 const STORAGE_DISCOVER_TYPES = "random-library:discover-types";
 const DEFAULT_DISCOVER_TYPES = ["album", "ep"];
+const STORAGE_DISCOVER_SAVED = "random-library:discover-include-saved";
 let discoverCache = null;
 let discoverShuffledCache = null;
 
@@ -2693,6 +2694,9 @@ function RandomLibraryApp() {
     } catch {}
     return DEFAULT_DISCOVER_TYPES;
   });
+  const [discoverIncludeSaved, setDiscoverIncludeSaved] = useState(
+    () => Spicetify.LocalStorage.get(STORAGE_DISCOVER_SAVED) === "true"
+  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2714,7 +2718,7 @@ function RandomLibraryApp() {
   // Reset visibleCount whenever user navigates or filters change
   useEffect(() => {
     setVisibleCount(INITIAL_BATCH_SIZE);
-  }, [mode, selectedArtist, sortBy, debouncedMainQuery, debouncedArtistQuery, releaseFilter, discoverTypes]);
+  }, [mode, selectedArtist, sortBy, debouncedMainQuery, debouncedArtistQuery, releaseFilter, discoverTypes, discoverIncludeSaved]);
 
   useEffect(() => {
     cachedMainSearchQuery = mainSearchQuery;
@@ -2768,6 +2772,13 @@ function RandomLibraryApp() {
       const next = active ? prev.filter((t) => t !== type) : [...prev, type];
       Spicetify.LocalStorage.set(STORAGE_DISCOVER_TYPES, JSON.stringify(next));
       return next;
+    });
+  }, []);
+
+  const toggleDiscoverSaved = useCallback(() => {
+    setDiscoverIncludeSaved((prev) => {
+      Spicetify.LocalStorage.set(STORAGE_DISCOVER_SAVED, String(!prev));
+      return !prev;
     });
   }, []);
 
@@ -3079,24 +3090,31 @@ function RandomLibraryApp() {
     return set;
   }, [savedAlbums]);
 
-  // Discover: catalog releases with no edition saved in the library
-  const unsavedDiscover = useMemo(() => {
+  // Discover: catalog releases flagged by whether any edition is saved in the library
+  const flaggedDiscover = useMemo(() => {
     const source = sortBy === "shuffle" ? discoverShuffled : discoverReleases;
-    return source.filter(
-      (r) =>
-        !savedNameSet.has(r.savedKey) &&
-        !(r.editions ? r.editions.some((e) => savedUriSet.has(e.uri)) : savedUriSet.has(r.uri))
-    );
+    return source.map((r) => ({
+      ...r,
+      isSaved:
+        savedNameSet.has(r.savedKey) ||
+        (r.editions ? r.editions.some((e) => savedUriSet.has(e.uri)) : savedUriSet.has(r.uri)),
+    }));
   }, [discoverShuffled, discoverReleases, sortBy, savedUriSet, savedNameSet]);
 
+  const discoverPool = useMemo(
+    () => (discoverIncludeSaved ? flaggedDiscover : flaggedDiscover.filter((r) => !r.isSaved)),
+    [flaggedDiscover, discoverIncludeSaved]
+  );
+
   const discoverTypeCounts = useMemo(() => {
-    const counts = {};
-    for (const r of unsavedDiscover) counts[r.type] = (counts[r.type] || 0) + 1;
+    const counts = { saved: 0 };
+    for (const r of discoverPool) counts[r.type] = (counts[r.type] || 0) + 1;
+    for (const r of flaggedDiscover) if (r.isSaved && discoverTypes.includes(r.type)) counts.saved++;
     return counts;
-  }, [unsavedDiscover]);
+  }, [discoverPool, flaggedDiscover, discoverTypes]);
 
   const displayedDiscover = useMemo(() => {
-    let list = sortAlbumList(unsavedDiscover.filter((r) => discoverTypes.includes(r.type)), sortBy);
+    let list = sortAlbumList(discoverPool.filter((r) => discoverTypes.includes(r.type)), sortBy);
 
     if (debouncedMainQuery.trim()) {
       const matcher = createSearchMatcher(debouncedMainQuery);
@@ -3104,7 +3122,7 @@ function RandomLibraryApp() {
     }
 
     return list;
-  }, [unsavedDiscover, discoverTypes, sortBy, debouncedMainQuery]);
+  }, [discoverPool, discoverTypes, sortBy, debouncedMainQuery]);
 
   // Exact unmodified saved album names scoped to artist
   const savedExactNameSet = useMemo(() => {
@@ -3330,7 +3348,7 @@ function RandomLibraryApp() {
         "div",
         { style: { fontSize: "13px", color: "var(--spice-subtext, rgba(255, 255, 255, 0.6))", fontWeight: 500 } },
         `Showing ${currentVisibleCount} of ${currentTotalCount} ${
-          selectedArtist ? "releases" : mode === "albums" ? "saved albums" : mode === "discover" ? "unsaved releases" : "artists"
+          selectedArtist ? "releases" : mode === "albums" ? "saved albums" : mode === "discover" ? (discoverIncludeSaved ? "releases" : "unsaved releases") : "artists"
         }`
       ),
 
@@ -3510,7 +3528,7 @@ function RandomLibraryApp() {
                 ? ` \u00b7 loading release dates ${albumMetaProgress.known}/${albumMetaProgress.total}`
                 : "")
             : mode === "discover"
-            ? `${displayedDiscover.length} releases not in your library ${sortBy === "shuffle" ? "shuffled" : "listed"}`
+            ? `${displayedDiscover.length} releases${discoverIncludeSaved ? "" : " not in your library"} ${sortBy === "shuffle" ? "shuffled" : "listed"}`
             : `${displayedArtists.length} followed artists ${sortBy === "shuffle" ? "shuffled" : "listed"}`
         )
       ),
@@ -4078,7 +4096,23 @@ function RandomLibraryApp() {
               f.label,
               React.createElement("span", { style: STYLES.pillCount(active) }, count)
             );
-          })
+          }),
+          React.createElement(
+            "button",
+            {
+              className: `rl-filter-pill ${discoverIncludeSaved ? "active" : ""}`,
+              style: {
+                ...STYLES.pill(discoverIncludeSaved),
+                ...(!discoverIncludeSaved
+                  ? { border: "1px solid rgba(30, 215, 96, 0.4)", background: "rgba(30, 215, 96, 0.08)", color: "#1ed760" }
+                  : {}),
+              },
+              onClick: toggleDiscoverSaved,
+              title: `${discoverIncludeSaved ? "Hide" : "Show"} releases already in your library (${discoverTypeCounts.saved})`,
+            },
+            "In Library",
+            React.createElement("span", { style: STYLES.pillCount(discoverIncludeSaved) }, discoverTypeCounts.saved)
+          )
         ),
         React.createElement(
           "div",
@@ -4098,7 +4132,7 @@ function RandomLibraryApp() {
               ),
               React.createElement("input", {
                 type: "text",
-                placeholder: "Search unsaved releases or artists\u2026",
+                placeholder: discoverIncludeSaved ? "Search releases or artists\u2026" : "Search unsaved releases or artists\u2026",
                 value: mainSearchQuery,
                 onChange: (e) => setMainSearchQuery(e.target.value),
                 style: STYLES.searchInput,
@@ -4151,7 +4185,7 @@ function RandomLibraryApp() {
           React.createElement(AlbumCard, {
             key: album.uri,
             album,
-            isSaved: false,
+            isSaved: album.isSaved,
             groupColors,
           })
         )
@@ -4166,6 +4200,8 @@ function RandomLibraryApp() {
           ? "Loading releases\u2026"
           : discoverReleases.length === 0
           ? "No release catalog found. Open Release List, let it sync, then press Refresh here."
+          : discoverIncludeSaved
+          ? "No releases match your filters."
           : "No unsaved releases match your filters."
       )
     ),

@@ -9,9 +9,9 @@ Companion to [Release List](https://github.com/daviidpaark/release-list); both a
 - **Albums, Artists, and Discover Modes**
   - **`Albums`**: Your saved albums, loaded from the local library.
   - **`Artists`**: A shuffled grid of the artists you follow.
-  - **`Discover`**: A shuffled grid of releases from followed artists that are not in your library. Toggle **Albums**, **EPs**, and **Singles**. The shuffle gives every artist equal weight, editions of one title are grouped under the **`Eds ▾`** dropdown, and titles you already saved in any edition are left out. Requires [Release List](https://github.com/daviidpaark/release-list), and covers the releases inside its sync window.
+  - **`Discover`**: A shuffled grid of releases from followed artists that are not in your library. Toggle **Albums**, **EPs**, and **Singles**. The shuffle gives every artist equal weight, editions of one title are grouped under the **`Eds ▾`** dropdown, and titles you already saved in any edition are left out unless you turn on **In Library** to see the full catalog (saved releases show the In Library badge). Requires [Release List](https://github.com/daviidpaark/release-list), and covers the releases inside its sync window.
 - **Random Picks**
-  - **`Random Album`** opens a random album from your saved collection. In **Discover** it picks a random artist first, then one of their unsaved releases.
+  - **`Random Album`** opens a random album from your saved collection. In **Discover** it picks a random artist first, then one of their releases from the current selection.
   - **`Random Artist`** opens the full discography of a random followed artist.
   - Step back and forward through past random artists with **`◀ Previous`** / **`Next ▶`** and a step counter (e.g. `3 of 5`).
   - Selected release filters persist across **Random Artist** rolls, so you can keep discovering within one category.
