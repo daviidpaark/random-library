@@ -1845,6 +1845,7 @@ const AlbumCard = React.memo(function AlbumCard({ album, isSaved = false, groupC
     "div",
     {
       className: "rl-card",
+      "data-uri": album.uri,
       onClick: handleClick,
       onMouseLeave: () => setShowEditions(false),
       title: `${album.name} – ${album.artist}${isSaved ? " (In Library)" : ""}`,
