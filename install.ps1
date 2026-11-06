@@ -5,7 +5,7 @@ $repoBaseUrl   = "https://raw.githubusercontent.com/daviidpaark/random-library/m
 $appsToInstall = @("random-library")
 $appsToClean   = @("random-albums")
 $appFiles      = @{
-    "random-library" = @("index.js", "manifest.json")
+    "random-library" = @("index.js", "manifest.json", "sync.js")
 }
 
 $ErrorActionPreference = "Stop"

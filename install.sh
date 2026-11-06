@@ -50,7 +50,7 @@ for app in "${APPS[@]}"; do
     cp -r "$src/." "$dest/"
     echo "  Copied to $dest"
   else
-    for file in index.js manifest.json; do
+    for file in index.js manifest.json sync.js; do
       echo "  Downloading $file..."
       curl -sL "$REPO_BASE_URL/$app/$file" -o "$dest/$file"
     done

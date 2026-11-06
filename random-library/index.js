@@ -757,42 +757,10 @@ function getWebSyncUrl() {
 }
 
 // notify: report the outcome even on success (manual sync)
+// The payload is built in sync.js, which also pushes in the background while the app is closed
 async function pushLibraryToWeb(albums, artists, notify = false) {
-  const baseUrl = getWebSyncUrl();
-  if (!baseUrl || !albums?.length) {
-    if (notify) Spicetify.showNotification?.(baseUrl ? "No saved albums to sync." : "Set a Web Sync address first.", true);
-    return;
-  }
-
-  const meta = loadAlbumMeta();
-  const savedAlbums = albums.map((a) => ({
-    uri: a.uri,
-    name: a.name,
-    artist: a.artist,
-    artistNames: a.artistNames || [],
-    artistUri: a.artistUri || "",
-    imageUrl: a.imageUrl || "",
-    type: a.type || "album",
-    releaseDate: meta.get(a.uri)?.releaseDate || a.releaseDate || "",
-    trackCount: meta.get(a.uri)?.trackCount || 0,
-  }));
-
-  try {
-    const res = await fetch(`${baseUrl}/api/library`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        albums: savedAlbums,
-        artists: (artists || []).map((a) => ({ uri: a.uri, name: a.name, imageUrl: a.imageUrl || "" })),
-        groupColors: getGroupColors(),
-      }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    if (notify) Spicetify.showNotification?.(`Synced ${savedAlbums.length} albums and ${artists?.length || 0} artists to the web.`);
-  } catch (err) {
-    console.warn("[Random Library] Web sync failed:", err);
-    Spicetify.showNotification?.(`Web sync failed: ${err.message || err}`, true);
-  }
+  if (window.RandomLibrarySync) return window.RandomLibrarySync.push(albums, artists, notify);
+  if (notify) Spicetify.showNotification?.("Web Sync needs the background sync. Run spicetify apply and restart Spotify.", true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1381,6 +1349,22 @@ async function fetchArtistReleases(artistUri, artistName = "") {
 
   artistDiscographyCache.set(artistUri, releases);
   return releases;
+}
+
+function onLibraryAlbumsChanged(callback) {
+  const events = Spicetify.Platform?.LibraryAPI?.getEvents?.();
+  if (typeof events?.addListener !== "function") return () => {};
+  let timer = null;
+  const handler = (event) => {
+    if (event?.data?.list && event.data.list !== "albums") return;
+    clearTimeout(timer);
+    timer = setTimeout(callback, 500);
+  };
+  events.addListener("update", handler);
+  return () => {
+    clearTimeout(timer);
+    events.removeListener("update", handler);
+  };
 }
 
 // Module-level caches
@@ -2991,6 +2975,51 @@ function RandomLibraryApp() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [loadSavedLibrary, loadFollowedArtists]);
+
+  // Follow saves and removals made anywhere in Spotify; also catches changes made while the app was closed
+  useEffect(() => {
+    let active = true;
+    let running = false;
+    let rerun = false;
+    const sync = async () => {
+      if (running) {
+        rerun = true;
+        return;
+      }
+      running = true;
+      try {
+        do {
+          rerun = false;
+          const albums = await fetchAllSavedAlbums();
+          if (!active || !albums.length) return;
+          const prev = savedAlbumCache || [];
+          if (prev.length === albums.length && albums.every((a, i) => a.uri === prev[i].uri)) continue;
+
+          const byUri = new Map(albums.map((a) => [a.uri, a]));
+          const prevUris = new Set(prev.map((a) => a.uri));
+          const shuffled = (savedShuffledCache || []).filter((a) => byUri.has(a.uri)).map((a) => byUri.get(a.uri));
+          for (const a of albums) {
+            if (!prevUris.has(a.uri)) shuffled.splice(Math.floor(Math.random() * (shuffled.length + 1)), 0, a);
+          }
+          savedAlbumCache = albums;
+          savedShuffledCache = shuffled;
+          setSavedAlbums(albums);
+          setSavedShuffled(shuffled);
+          enrichSavedAlbums(albums).finally(() => pushLibraryToWeb(albums, followedArtistCache));
+        } while (rerun && active);
+      } catch (err) {
+        console.warn("[Random Library] Library sync failed:", err);
+      } finally {
+        running = false;
+      }
+    };
+    if (savedAlbumCache) sync();
+    const unsubscribe = onLibraryAlbumsChanged(sync);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   // Random Artist Pick (persists active release filter & pushes to history!)
   const handlePickRandomArtist = useCallback(() => {

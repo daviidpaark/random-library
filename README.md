@@ -33,7 +33,7 @@ Companion to [Release List](https://github.com/daviidpaark/release-list); both a
   - Shuffle order is preserved across Spotify restarts.
 - **Refresh**: Click **`Refresh`** to sync newly saved albums and followed artists from Spotify (also clears random navigation history).
 - **Export**: Export your saved albums as JSON or CSV from the **Export Saved Albums** entry in the profile menu.
-- **Web Sync** (optional): Enter the address of a [Spicetify Library](https://github.com/daviidpaark/spicetify-library) container in **Settings** to browse your library from a phone. **Sync Now** and **Refresh** push your saved albums and followed artists to it.
+- **Web Sync** (optional): Enter the address of a [Spicetify Library](https://github.com/daviidpaark/spicetify-library) container in **Settings** to browse your library from a phone. **Sync Now** and **Refresh** push your saved albums and followed artists to it, and a small background script pushes again whenever you save or remove an album or follow or unfollow an artist while Spotify is open, even with Random Library closed.
 
 ## How It Works
 
