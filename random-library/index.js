@@ -1,6 +1,6 @@
 // @ts-check
 // NAME: Random Library
-// AUTHOR: david
+// AUTHOR: daviidpaark
 // DESCRIPTION: Displays your saved albums & followed artists in a fast, shuffled, filterable grid.
 
 const { React } = Spicetify;
