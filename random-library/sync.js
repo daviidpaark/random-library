@@ -26,6 +26,25 @@
     return (storageGet(STORAGE_WEB_SYNC_URL) || "").trim().replace(/\/+$/, "");
   }
 
+  // "push" for the sync port, "read-only" for the public site, "unreachable" otherwise.
+  // The public site refuses the CORS preflight a PUT needs but still serves reads.
+  let modeCache = { url: "", mode: null };
+  async function webSyncMode(baseUrl = getWebSyncUrl()) {
+    if (!baseUrl) return null;
+    if (modeCache.url === baseUrl && modeCache.mode) return modeCache.mode;
+    let mode = "unreachable";
+    try {
+      await fetch(`${baseUrl}/api/library`, { method: "OPTIONS" });
+      mode = "push";
+    } catch {
+      try {
+        if ((await fetch(`${baseUrl}/api/sync/library`)).ok) mode = "read-only";
+      } catch {}
+    }
+    if (mode !== "unreachable") modeCache = { url: baseUrl, mode };
+    return mode;
+  }
+
   function withDefaultColors(colors) {
     return {
       album: colors.album || DEFAULT_GROUP_COLORS.album,
@@ -147,6 +166,10 @@
       if (notify) Spicetify.showNotification?.(baseUrl ? "No saved albums to sync." : "Set a Web Sync address first.", true);
       return;
     }
+    if ((await webSyncMode(baseUrl)) === "read-only") {
+      if (notify) Spicetify.showNotification?.("This address is read-only. Pushes need the sync port address.", true);
+      return;
+    }
     if (!artists) artists = await fetchFollowedArtists();
 
     const meta = loadAlbumMeta();
@@ -187,7 +210,8 @@
     try {
       do {
         rerun = false;
-        if (!getWebSyncUrl()) return;
+        const mode = await webSyncMode();
+        if (!mode || mode === "read-only") return;
         const [albums, artists] = await Promise.all([fetchSavedAlbums(), fetchFollowedArtists()]);
         await push(albums, artists);
       } while (rerun);
@@ -203,7 +227,7 @@
     timer = setTimeout(syncNow, DEBOUNCE_MS);
   }
 
-  window.RandomLibrarySync = { push, syncNow: schedule };
+  window.RandomLibrarySync = { push, syncNow: schedule, webSyncMode };
 
   (async function start() {
     while (!Spicetify?.Platform?.LibraryAPI?.getEvents) await new Promise((resolve) => setTimeout(resolve, 300));

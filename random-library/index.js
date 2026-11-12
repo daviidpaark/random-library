@@ -318,6 +318,22 @@ if (typeof document !== "undefined" && !document.getElementById("random-library-
     .rl-color-hex:focus {
       border-color: #1ed760;
     }
+    .rl-url-input {
+      flex: 1;
+      min-width: 0;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 6px 10px;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .rl-url-input:focus {
+      border-color: #1ed760;
+    }
   `;
   document.head.appendChild(styleEl);
 }
@@ -836,6 +852,21 @@ function saveAlbumMeta() {
   } catch {}
 }
 
+// Saved albums another device already pushed, with their release dates and track counts
+async function pullLibraryFromWeb() {
+  const baseUrl = getWebSyncUrl();
+  if (!baseUrl) return [];
+  try {
+    const res = await fetch(`${baseUrl}/api/sync/library`);
+    if (!res.ok) return [];
+    const snapshot = await res.json();
+    return Array.isArray(snapshot?.albums) ? snapshot.albums : [];
+  } catch (err) {
+    console.warn("[Random Library] Could not load the library from the web:", err);
+    return [];
+  }
+}
+
 // Read-only access to Release List's catalog; never creates or upgrades its database
 function readReleaseListCatalog() {
   return new Promise((resolve) => {
@@ -915,6 +946,14 @@ async function enrichSavedAlbums(albums) {
       }
     }
     missing = missing.filter((uri) => !meta.has(uri));
+    if (missing.length) {
+      for (const album of await pullLibraryFromWeb()) {
+        if (album?.releaseDate && savedUris.has(album.uri) && !meta.has(album.uri)) {
+          meta.set(album.uri, { releaseDate: album.releaseDate, trackCount: album.trackCount || 0 });
+        }
+      }
+      missing = missing.filter((uri) => !meta.has(uri));
+    }
     saveAlbumMeta();
     albumMetaListener?.();
 
@@ -2235,6 +2274,21 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
   });
   const [isClearing, setIsClearing] = useState(false);
   const [isWebSyncing, setIsWebSyncing] = useState(false);
+  const [webSyncUrl, setWebSyncUrl] = useState(getWebSyncUrl);
+  const [webSyncMode, setWebSyncMode] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setWebSyncMode(null);
+    const timer = setTimeout(async () => {
+      const mode = await window.RandomLibrarySync?.webSyncMode(webSyncUrl);
+      if (!cancelled) setWebSyncMode(mode ?? null);
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [webSyncUrl]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -2461,28 +2515,38 @@ function SettingsModal({ onClose, groupColors, onGroupColorsChange }) {
             "div",
             { style: { display: "flex", gap: 8, alignItems: "center" } },
             React.createElement("input", {
-              className: "rl-color-hex",
-              style: { flex: 1, minWidth: 0, width: "auto", fontFamily: "inherit" },
+              className: "rl-url-input",
               type: "url",
               placeholder: "http://192.168.1.100:8081",
+              autoCapitalize: "off",
+              autoCorrect: "off",
+              spellCheck: false,
               defaultValue: getWebSyncUrl(),
-              onChange: (e) => Spicetify.LocalStorage.set(STORAGE_WEB_SYNC_URL, e.target.value.trim()),
-            }),
-            React.createElement(
-              "button",
-              {
-                className: "rl-action-btn",
-                style: { ...STYLES.actionBtn, fontSize: 12, padding: "6px 14px", flexShrink: 0 },
-                onClick: handleWebSync,
-                disabled: isWebSyncing,
+              onChange: (e) => {
+                Spicetify.LocalStorage.set(STORAGE_WEB_SYNC_URL, e.target.value.trim());
+                setWebSyncUrl(getWebSyncUrl());
               },
-              isWebSyncing ? "Syncing..." : "Sync Now"
-            )
+            }),
+            webSyncMode !== "read-only" &&
+              React.createElement(
+                "button",
+                {
+                  className: "rl-action-btn",
+                  style: { ...STYLES.actionBtn, fontSize: 12, padding: "6px 14px", flexShrink: 0 },
+                  onClick: handleWebSync,
+                  disabled: isWebSyncing,
+                },
+                isWebSyncing ? "Syncing..." : "Sync Now"
+              )
           ),
           React.createElement(
             "div",
             { style: { fontSize: 12, color: "rgba(255,255,255,0.6)" } },
-            "Optional. Address of a Spicetify Library sync endpoint. Refresh and Sync Now push your saved albums and followed artists to it. Shared with Release List."
+            webSyncMode === "read-only"
+              ? "Read-only address: this device loads saved albums from it and never pushes. Use the sync port address to push from here. Shared with Release List."
+              : webSyncMode === "unreachable"
+                ? "Can't reach this address. Check that Spicetify Library is running. Shared with Release List."
+                : "Optional. Address of a Spicetify Library sync endpoint. Refresh and Sync Now push your saved albums and followed artists to it. Shared with Release List."
           )
         ),
         // Section 3: Cache Management
