@@ -124,7 +124,7 @@
     let offset = 0;
     let total = Infinity;
     while (offset < total) {
-      const res = await Spicetify.Platform.LibraryAPI.getContents({ filters: [filter], sortOrder: "RECENTLY_ADDED", limit: PAGE_SIZE, offset });
+      const res = await Spicetify.Platform.LibraryAPI.getContents({ filters: [filter], sortOrder: "1", limit: PAGE_SIZE, offset });
       if (!res?.items?.length) break;
       for (const item of res.items) {
         if (!item.uri || seen.has(item.uri) || !accept(item)) continue;

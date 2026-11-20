@@ -610,7 +610,7 @@ async function fetchAllSavedAlbums(onProgress) {
   while (offset < total) {
     const response = await Spicetify.Platform.LibraryAPI.getContents({
       filters: ["0"], // Library filter
-      sortOrder: "RECENTLY_ADDED",
+      sortOrder: "1",
       limit,
       offset,
     });
@@ -792,7 +792,7 @@ async function fetchAllFollowedArtists(onProgress) {
   while (offset < total) {
     const response = await Spicetify.Platform.LibraryAPI.getContents({
       filters: ["1"], // "1" = Artists in library
-      sortOrder: "RECENTLY_ADDED",
+      sortOrder: "1",
       limit,
       offset,
     });
